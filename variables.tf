@@ -1,0 +1,37 @@
+variable "lakekeeper_version" {
+  description = "Lakekeeper catalog image tag on quay.io"
+  type        = string
+  default     = "v0.12.0"
+}
+
+variable "pg_user" {
+  type    = string
+  default = "postgres"
+}
+
+variable "pg_password" {
+  type    = string
+  default = "postgres"
+}
+
+variable "s3_access_key" {
+  type    = string
+  default = "minio-admin"
+}
+
+variable "s3_secret_key" {
+  type    = string
+  default = "minio-admin-password"
+}
+
+variable "bucket" {
+  description = "MinIO bucket that backs the warehouse"
+  type        = string
+  default     = "warehouse"
+}
+
+variable "warehouse" {
+  description = "Lakekeeper warehouse name (referenced by Spark as the catalog warehouse)"
+  type        = string
+  default     = "demo"
+}

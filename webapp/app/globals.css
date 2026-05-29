@@ -1,0 +1,168 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Dark (default) palette. Bare `R G B` triplets so tailwind opacity
+ * modifiers (`/40`, `/80`) keep working — see tailwind.config.ts. */
+:root {
+  color-scheme: dark;
+
+  --ice-50:  241 247 255;
+  --ice-100: 220 236 255;
+  --ice-200: 191 219 254;
+  --ice-300: 147 197 253;
+  --ice-400: 96 165 250;
+  --ice-500: 59 130 246;
+  --ice-700: 29 78 216;
+
+  --ink-700: 31 41 55;
+  --ink-800: 17 24 39;
+  --ink-900: 11 18 32;
+
+  --gray-100: 243 244 246;
+  --gray-200: 229 231 235;
+  --gray-300: 209 213 219;
+  --gray-400: 156 163 175;
+  --gray-500: 107 114 128;
+  --gray-600: 75 85 99;
+  --gray-700: 55 65 81;
+
+  --body-bg-from: #0b1220;
+  --body-bg-to:   #111827;
+  --body-fg:      #e5e7eb;
+
+  --scrollbar-thumb: #1f2937;
+
+  --sql-keyword: #93c5fd;
+  --sql-string:  #fbbf24;
+  --sql-number:  #f472b6;
+  --sql-comment: #6b7280;
+
+  /* Architecture diagram surfaces. Box fills are tinted but legible on dark. */
+  --arch-chip-bg:     #1e293b;
+  --arch-chip-stroke: #475569;
+  --arch-chip-fg:     #cbd5e1;
+  --arch-edge:        #7aa8c6;
+  --arch-edge-dim:    #557080;
+  --arch-edge-label:  #94a3b8;
+
+  --arch-webapp-bg:     #1e2a44;
+  --arch-webapp-stroke: #7c8cc6;
+  --arch-webapp-fg:     #dbe5ff;
+  --arch-webapp-sub:    #94a3b8;
+
+  --arch-spark-bg:     #311e44;
+  --arch-spark-stroke: #a17ec6;
+  --arch-spark-fg:     #e9d8ff;
+  --arch-spark-sub:    #cbb5e3;
+
+  --arch-lake-bg:     #0f3340;
+  --arch-lake-stroke: #5fc4d3;
+  --arch-lake-fg:     #d6f4fa;
+  --arch-lake-sub:    #a8d8e2;
+
+  --arch-minio-bg:     #3d2415;
+  --arch-minio-stroke: #d99868;
+  --arch-minio-fg:     #fbe2cf;
+  --arch-minio-sub:    #e6c4a4;
+
+  --arch-pg-foot:     #7aa8c6;
+}
+
+/* Light palette. Surfaces become near-white slate; the ice ramp inverts so
+ * the low numbers (100/200), used as primary text on dark, become readable
+ * dark-blue text on light. High numbers (400/500/700) stay vivid as accents
+ * and button backgrounds. */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --ice-50:  239 246 255;
+  --ice-100:  15 23 42;    /* slate-900, primary heading + body brand text */
+  --ice-200:  30 58 138;   /* blue-900, secondary brand text */
+  --ice-300:  29 78 216;   /* blue-700, accent text on light bg */
+  --ice-400:  37 99 235;   /* blue-600 */
+  --ice-500:  37 99 235;   /* blue-600, button bg (white fg) */
+  --ice-700:  30 64 175;   /* blue-800 */
+
+  /* `ink` reads as "neutral surface" — flip from near-black to near-white. */
+  --ink-700: 226 232 240;
+  --ink-800: 241 245 249;
+  --ink-900: 255 255 255;
+
+  --gray-100: 15 23 42;
+  --gray-200: 30 41 59;
+  --gray-300: 51 65 85;
+  --gray-400: 71 85 105;
+  --gray-500: 100 116 139;
+  --gray-600: 148 163 184;
+  --gray-700: 203 213 225;
+
+  --body-bg-from: #f8fafc;
+  --body-bg-to:   #eef2f7;
+  --body-fg:      #0f172a;
+
+  --scrollbar-thumb: #cbd5e1;
+
+  --sql-keyword: #1d4ed8;
+  --sql-string:  #b45309;
+  --sql-number:  #be185d;
+  --sql-comment: #64748b;
+
+  --arch-chip-bg:     #f1f5f9;
+  --arch-chip-stroke: #94a3b8;
+  --arch-chip-fg:     #1e293b;
+  --arch-edge:        #475569;
+  --arch-edge-dim:    #94a3b8;
+  --arch-edge-label:  #475569;
+
+  --arch-webapp-bg:     #e0e7ff;
+  --arch-webapp-stroke: #4f46e5;
+  --arch-webapp-fg:     #1e1b4b;
+  --arch-webapp-sub:    #475569;
+
+  --arch-spark-bg:     #f3e8ff;
+  --arch-spark-stroke: #7c3aed;
+  --arch-spark-fg:     #3b0764;
+  --arch-spark-sub:    #5b21b6;
+
+  --arch-lake-bg:     #cffafe;
+  --arch-lake-stroke: #0e7490;
+  --arch-lake-fg:     #083344;
+  --arch-lake-sub:    #155e75;
+
+  --arch-minio-bg:     #ffedd5;
+  --arch-minio-stroke: #c2410c;
+  --arch-minio-fg:     #431407;
+  --arch-minio-sub:    #9a3412;
+
+  --arch-pg-foot:     #475569;
+}
+
+html, body { height: 100%; }
+body {
+  background: linear-gradient(180deg, var(--body-bg-from) 0%, var(--body-bg-to) 100%);
+  color: var(--body-fg);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+}
+
+.scrollbar-thin::-webkit-scrollbar { width: 8px; height: 8px; }
+.scrollbar-thin::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 4px; }
+
+.sql-keyword { color: var(--sql-keyword); font-weight: 600; }
+.sql-string  { color: var(--sql-string); }
+.sql-number  { color: var(--sql-number); }
+.sql-comment { color: var(--sql-comment); font-style: italic; }
+
+/* Animated bouncing dots used by Running indicators. */
+@keyframes ic-dot-bounce {
+  0%, 60%, 100% { opacity: 0.25; transform: translateY(0); }
+  30%           { opacity: 1;    transform: translateY(-2px); }
+}
+.ic-dots { display: inline-flex; gap: 2px; margin-left: 4px; align-items: center; }
+.ic-dots > span {
+  width: 4px; height: 4px; border-radius: 50%;
+  background: currentColor;
+  animation: ic-dot-bounce 1.1s infinite ease-in-out;
+}
+.ic-dots > span:nth-child(2) { animation-delay: 0.18s; }
+.ic-dots > span:nth-child(3) { animation-delay: 0.36s; }

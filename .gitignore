@@ -1,0 +1,50 @@
+# Terraform state + locals
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+crash.log
+crash.*.log
+
+# Plan / apply artifacts
+*.tfplan
+*.tfplan.*
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Local var files (may contain creds)
+*.tfvars
+*.tfvars.json
+!example.tfvars
+
+# Spark / Iceberg runtime spill (if anything escapes containers)
+spark-warehouse/
+derby.log
+metastore_db/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Local agent / assistant config (not part of the demo)
+.claude/
+CLAUDE.md
+
+# Webapp (Next.js)
+webapp/node_modules/
+webapp/.next/
+webapp/out/
+webapp/.turbo/
+webapp/next-env.d.ts
+webapp/tsconfig.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.env
+.env.local
+.env.*.local
