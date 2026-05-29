@@ -60,7 +60,7 @@ Set `RUN_DEMO=1` to batch the whole `sql/demo.sql` through beeline instead.
 ```bash
 ./start.sh                           # bring up an empty stack (run steps in the webapp)
 RUN_DEMO=1 ./start.sh                # bring up + run all of demo.sql end-to-end
-terraform destroy -auto-approve      # tear down
+./destroy.sh                         # tear down (destroy + force-remove any stragglers)
 ```
 
 ### Manual
@@ -99,6 +99,7 @@ State is in-memory; the cache resets when `demo-webapp` restarts.
 ```
 main.tf, variables.tf, outputs.tf   # Terraform root
 start.sh                            # one-shot launcher (Docker → terraform → beeline)
+destroy.sh                          # teardown (terraform destroy + force-remove stragglers)
 scripts/bootstrap.sh                # MinIO bucket + Lakekeeper warehouse registration
 sql/demo.sql                        # V3 showcase (mounted into spark-thrift at /opt/demo)
 spark/spark-defaults.conf           # Iceberg packages + REST catalog wiring
