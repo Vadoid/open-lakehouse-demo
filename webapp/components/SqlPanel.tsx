@@ -212,9 +212,7 @@ export default function SqlPanel({ step }: { step: Step }) {
         setProgress((p) => p ? { ...p, elapsedMs: msg.elapsedMs } : p);
         break;
       case "result":
-        if (msg.columns.length > 0) {
-          setResults((r) => [...r, { stmtIdx: msg.stmtIdx, columns: msg.columns, data: msg.data }]);
-        }
+        setResults((r) => [...r, { stmtIdx: msg.stmtIdx, columns: msg.columns, data: msg.data }]);
         break;
       case "done":
         setDoneMs(msg.durationMs);
@@ -379,6 +377,7 @@ export default function SqlPanel({ step }: { step: Step }) {
           <div className="p-3 space-y-3 bg-ink-900/40">
             {results.map((r, i) => {
               const snippet = (stmtSql[r.stmtIdx] ?? "").replace(/\s+/g, " ").trim().slice(0, 120);
+              const isQuery = r.columns && r.columns.length > 0;
               return (
                 <div key={i} className="rounded-md border border-ink-700 bg-ink-900/80 shadow-sm overflow-hidden">
                   <div className="flex items-center gap-2 px-3 py-1.5 bg-ink-800/60 border-b border-ink-700">
@@ -386,9 +385,17 @@ export default function SqlPanel({ step }: { step: Step }) {
                     {snippet && (
                       <code className="text-[11px] font-mono text-gray-400 truncate flex-1">{snippet}{snippet.length === 120 ? "…" : ""}</code>
                     )}
-                    <span className="text-[10px] text-gray-500 flex-none">{r.data.length} row{r.data.length === 1 ? "" : "s"}</span>
+                    {isQuery ? (
+                      <span className="text-[10px] text-gray-500 flex-none">{r.data.length} row{r.data.length === 1 ? "" : "s"}</span>
+                    ) : (
+                      <span className="text-[10px] text-emerald-400 font-semibold flex-none">Success</span>
+                    )}
                   </div>
-                  <ResultTable columns={r.columns} data={r.data} />
+                  {isQuery ? (
+                    <ResultTable columns={r.columns} data={r.data} />
+                  ) : (
+                    <div className="px-3 py-2 text-gray-500 italic text-[11px] bg-ink-900/10">Statement executed successfully (no result set returned).</div>
+                  )}
                 </div>
               );
             })}
@@ -439,83 +446,49 @@ export default function SqlPanel({ step }: { step: Step }) {
 }
 
 function ResultTable({ columns, data }: { columns: string[]; data: any[][] }) {
-  const [filterText, setFilterText] = useState("");
   if (columns.length === 0) return null;
   if (data.length === 0) {
     return <div className="px-3 py-2 text-gray-500 italic text-xs">(no rows)</div>;
   }
 
-  const filteredData = data.filter((row) =>
-    row.some((cell) =>
-      String(cell ?? "").toLowerCase().includes(filterText.toLowerCase())
-    )
-  );
-
   return (
     <div className="flex flex-col">
-      {/* Filter Panel */}
-      <div className="px-3 py-1.5 bg-ink-950/20 border-b border-ink-700/60 flex items-center justify-between gap-4">
-        <div className="relative flex-1 max-w-xs">
-          <input
-            type="text"
-            value={filterText}
-            onChange={(e) => setFilterText(e.target.value)}
-            placeholder="Filter rows..."
-            className="w-full pl-7 pr-3 py-1 bg-ink-950 text-xs rounded border border-ink-700/60 focus:border-ice-500/40 outline-none text-gray-200 placeholder-gray-600 transition"
-          />
-          <span className="absolute left-2.5 top-1.5 text-gray-600">
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-          </span>
-        </div>
-        {filterText && (
-          <span className="text-[10px] text-gray-400">
-            Found {filteredData.length} of {data.length} rows
-          </span>
-        )}
-      </div>
-
       <div className="overflow-auto scrollbar-thin max-h-[28rem]">
-        {filteredData.length === 0 ? (
-          <div className="px-3 py-6 text-gray-500 italic text-xs text-center bg-ink-900/10">No rows match "{filterText}"</div>
-        ) : (
-          <table className="min-w-full table-auto border-separate border-spacing-0">
-            <thead className="sticky top-0 z-10">
-              <tr>
-                {columns.map((c) => (
-                  <th
-                    key={c}
-                    className="text-left px-3 py-2 bg-ink-800 text-[10px] font-semibold uppercase tracking-[0.08em] text-gray-400 border-b-2 border-ice-500/40 whitespace-nowrap"
-                  >
-                    {c}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filteredData.map((row, i) => (
-                <tr key={i} className="even:bg-ink-900/30 hover:bg-ice-500/[0.06] transition-colors">
-                  {row.map((v, j) => {
-                    const s = v === null || v === undefined ? null : fmtCell(v);
-                    const long = s !== null && s.length > 80;
-                    return (
-                      <td
-                        key={j}
-                        title={long ? s! : undefined}
-                        className="px-3 py-1.5 text-gray-100 border-b border-ink-700/40 align-top font-mono text-[12px] max-w-[28rem] truncate"
-                      >
-                        {s === null ? (
-                          <span className="px-1.5 py-0.5 rounded bg-ink-950/80 text-[10px] text-gray-600 font-semibold border border-ink-700/40">NULL</span>
-                        ) : s}
-                      </td>
-                    );
-                  })}
-                </tr>
+        <table className="min-w-full table-auto border-separate border-spacing-0">
+          <thead className="sticky top-0 z-10">
+            <tr>
+              {columns.map((c) => (
+                <th
+                  key={c}
+                  className="text-left px-3 py-2 bg-ink-800 text-[10px] font-semibold uppercase tracking-[0.08em] text-gray-400 border-b-2 border-ice-500/40 whitespace-nowrap"
+                >
+                  {c}
+                </th>
               ))}
-            </tbody>
-          </table>
-        )}
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((row, i) => (
+              <tr key={i} className="even:bg-ink-900/30 hover:bg-ice-500/[0.06] transition-colors">
+                {row.map((v, j) => {
+                  const s = v === null || v === undefined ? null : fmtCell(v);
+                  const long = s !== null && s.length > 80;
+                  return (
+                    <td
+                      key={j}
+                      title={long ? s! : undefined}
+                      className="px-3 py-1.5 text-gray-100 border-b border-ink-700/40 align-top font-mono text-[12px] max-w-[28rem] truncate"
+                    >
+                      {s === null ? (
+                        <span className="px-1.5 py-0.5 rounded bg-ink-950/80 text-[10px] text-gray-600 font-semibold border border-ink-700/40">NULL</span>
+                      ) : s}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );
