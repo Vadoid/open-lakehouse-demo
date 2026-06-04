@@ -21,45 +21,32 @@ if ! docker network inspect "${NET}" >/dev/null 2>&1; then
 fi
 echo ">> using network '${NET}'"
 
-# mc cors set expects XML, not JSON. This is the root cause of 'decoding xml: EOF'.
-CORS_XML=$(cat <<EOF
-<CORSConfiguration>
- <CORSRule>
-   <AllowedOrigin>http://localhost:3030</AllowedOrigin>
-   <AllowedOrigin>http://localhost:8181</AllowedOrigin>
-   <AllowedOrigin>http://${EXTERNAL_IP}:3030</AllowedOrigin>
-   <AllowedOrigin>http://${EXTERNAL_IP}:8181</AllowedOrigin>
-   <AllowedMethod>GET</AllowedMethod>
-   <AllowedMethod>HEAD</AllowedMethod>
-   <AllowedMethod>POST</AllowedMethod>
-   <AllowedMethod>PUT</AllowedMethod>
-   <AllowedMethod>DELETE</AllowedMethod>
-   <AllowedHeader>*</AllowedHeader>
-   <ExposeHeader>ETag</ExposeHeader>
-   <ExposeHeader>x-amz-version-id</ExposeHeader>
-   <MaxAgeSeconds>3000</MaxAgeSeconds>
- </CORSRule>
-</CORSConfiguration>
-EOF
-)
+# VER 6: Using XML in a single-line string to avoid any shell/pipe mangling.
+# S3 requires multiple <AllowedOrigin> and <AllowedMethod> tags for multiple values.
+CORS_XML="<CORSConfiguration><CORSRule><AllowedOrigin>http://localhost:3030</AllowedOrigin><AllowedOrigin>http://localhost:8181</AllowedOrigin><AllowedOrigin>http://${EXTERNAL_IP}:3030</AllowedOrigin><AllowedOrigin>http://${EXTERNAL_IP}:8181</AllowedOrigin><AllowedMethod>GET</AllowedMethod><AllowedMethod>HEAD</AllowedMethod><AllowedMethod>POST</AllowedMethod><AllowedMethod>PUT</AllowedMethod><AllowedMethod>DELETE</AllowedMethod><AllowedHeader>*</AllowedHeader><ExposeHeader>ETag</ExposeHeader><ExposeHeader>x-amz-version-id</ExposeHeader><MaxAgeSeconds>3000</MaxAgeSeconds></CORSRule></CORSConfiguration>"
 
-# Run bootstrap inside the mc container. Pass XML via stdin using '-'.
-echo "${CORS_XML}" | docker run --rm -i --network "${NET}" --entrypoint /bin/sh minio/mc -c "
+docker run --rm --network "${NET}" --entrypoint /bin/sh minio/mc -c "
   set -e
+  echo '>> [VER: 6] Configuring mc alias...'
   mc alias set lake http://lake-minio:9000 '${S3_ACCESS_KEY}' '${S3_SECRET_KEY}'
+  
+  echo '>> [VER: 6] Creating bucket lake/${BUCKET}...'
   mc mb --ignore-existing lake/${BUCKET}
   
-  echo '>> Applying CORS policy...'
-  # Give MinIO a few seconds to commit the bucket before setting CORS
+  echo '${CORS_XML}' > /tmp/cors.xml
+  
+  echo '>> [VER: 6] Applying CORS policy (with retries)...'
   sleep 5
   for i in 1 2 3 4 5; do
-    if mc cors set lake/${BUCKET} -; then
-      echo '>> CORS applied successfully.'
+    echo \"   Attempt \$i to set CORS...\"
+    if mc cors set lake/${BUCKET} /tmp/cors.xml; then
+      echo '>> [VER: 6] CORS applied successfully.'
       exit 0
     fi
     echo \"   CORS set failed, retrying in 5s...\"
     sleep 5
   done
+  echo '!! [VER: 6] Failed to set CORS after 5 attempts.'
   exit 1
 "
 
