@@ -342,22 +342,44 @@ export default function LineageGraph({ table }: { table: string }) {
             <input type="checkbox" checked={showOnlyCurrent} onChange={(e) => setShowOnlyCurrent(e.target.checked)} />
             only current snapshot
           </label>
-          <div className="flex items-center gap-1 text-[10px] text-gray-400">
+          <div className="flex items-center gap-1.5 text-[10px] text-gray-400">
             <button onClick={() => setZoom((z) => clampZoom(z / 1.2))}
-                    className="px-1.5 py-0.5 rounded border border-ink-700 hover:text-ice-100 hover:border-ice-500"
-                    title="Zoom out (Ctrl+wheel)">−</button>
-            <span className="font-mono tabular-nums w-9 text-center">{Math.round(zoom * 100)}%</span>
+                    className="p-1 rounded border border-ink-700 bg-ink-900/60 hover:text-ice-100 hover:border-ice-500 transition-colors flex items-center justify-center"
+                    title="Zoom out (Ctrl+wheel)">
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M20 12H4" />
+              </svg>
+            </button>
+            <span className="font-mono tabular-nums w-10 text-center select-none text-gray-300">{Math.round(zoom * 100)}%</span>
             <button onClick={() => setZoom((z) => clampZoom(z * 1.2))}
-                    className="px-1.5 py-0.5 rounded border border-ink-700 hover:text-ice-100 hover:border-ice-500"
-                    title="Zoom in (Ctrl+wheel)">+</button>
+                    className="p-1 rounded border border-ink-700 bg-ink-900/60 hover:text-ice-100 hover:border-ice-500 transition-colors flex items-center justify-center"
+                    title="Zoom in (Ctrl+wheel)">
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+            </button>
             <button onClick={resetView}
-                    className="px-1.5 py-0.5 rounded border border-ink-700 hover:text-ice-100 hover:border-ice-500"
-                    title="Reset zoom + pan">fit</button>
+                    className="p-1 rounded border border-ink-700 bg-ink-900/60 hover:text-ice-100 hover:border-ice-500 transition-colors flex items-center justify-center"
+                    title="Reset zoom + pan">
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 4h5M4 4v5m0-5l5 5m11-5h-5m5 0v5m0-5l-5 5M4 20h5m-5 0v-5m0 5l5-5m11 5h-5m5 0v-5m0 5l-5-5" />
+              </svg>
+            </button>
             <button onClick={() => setTall((t) => !t)}
-                    className="px-1.5 py-0.5 rounded border border-ink-700 hover:text-ice-100 hover:border-ice-500"
-                    title="Toggle panel height">{tall ? "shrink" : "expand"}</button>
+                    className="p-1 rounded border border-ink-700 bg-ink-900/60 hover:text-ice-100 hover:border-ice-500 transition-colors flex items-center justify-center"
+                    title="Toggle panel height">
+              {tall ? (
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              ) : (
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
+                </svg>
+              )}
+            </button>
           </div>
-          <button onClick={fetchData} className="text-[11px] text-ice-500 hover:text-ice-100">refresh</button>
+          <button onClick={fetchData} className="text-[11px] text-ice-500 hover:text-ice-300 font-semibold transition-colors">refresh</button>
         </div>
       </div>
       {err && <div className="p-3 text-red-400 text-xs font-mono whitespace-pre-wrap">{err}</div>}
@@ -463,16 +485,16 @@ export default function LineageGraph({ table }: { table: string }) {
           </div>
 
           {selNode && (
-          <div className="col-span-4 border-l border-ink-700 max-h-[420px] overflow-auto scrollbar-thin p-3 text-xs">
-              <div className="space-y-2">
-                <div className="flex items-start justify-between gap-2">
+            <div className="col-span-4 border-l border-ink-700/60 bg-ink-950/20 max-h-[420px] overflow-auto scrollbar-thin p-4 text-xs backdrop-blur-md transition-all duration-300 ease-out">
+              <div className="space-y-3.5">
+                <div className="flex items-center justify-between gap-3 border-b border-ink-700/60 pb-2.5">
                   <div>
-                    <span className="text-[10px] uppercase tracking-wider text-gray-500">Kind</span>
-                    <div className="text-ice-200 font-semibold">{KIND_STYLE[selNode.kind].short}</div>
+                    <span className="text-[10px] uppercase font-semibold tracking-wider text-gray-500">Kind</span>
+                    <div className="text-ice-300 font-bold text-sm tracking-tight">{KIND_STYLE[selNode.kind].short}</div>
                   </div>
                   <button onClick={() => setSelId(null)}
-                          className="text-gray-500 hover:text-ice-100 text-[14px] leading-none"
-                          title="Close detail">×</button>
+                          className="w-6 h-6 rounded-full hover:bg-ink-800 flex items-center justify-center text-gray-400 hover:text-gray-200 transition-colors text-[18px] leading-none"
+                          title="Close details">×</button>
                 </div>
                 {!selNode.meta?.collapsed && (
                   <div>

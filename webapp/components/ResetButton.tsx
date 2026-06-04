@@ -16,6 +16,9 @@ export default function ResetButton() {
       const r = await fetch("/api/reset", { method: "POST" });
       const j = (await r.json()) as ResetResult;
       setResult(j);
+      if (j.ok) {
+        window.dispatchEvent(new CustomEvent("ic:step-ran", { detail: { stepId: 0 } }));
+      }
     } catch (e: any) {
       setResult({ ok: false, log: [], errors: [String(e?.message ?? e)] });
     } finally {

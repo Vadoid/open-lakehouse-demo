@@ -140,13 +140,16 @@
 
 html, body { height: 100%; }
 body {
-  background: linear-gradient(180deg, var(--body-bg-from) 0%, var(--body-bg-to) 100%);
+  background: radial-gradient(circle at top right, rgba(29, 78, 216, 0.08), transparent 40%),
+              radial-gradient(circle at bottom left, rgba(59, 130, 246, 0.05), transparent 45%),
+              linear-gradient(180deg, var(--body-bg-from) 0%, var(--body-bg-to) 100%);
   color: var(--body-fg);
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
-.scrollbar-thin::-webkit-scrollbar { width: 8px; height: 8px; }
-.scrollbar-thin::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 4px; }
+.scrollbar-thin::-webkit-scrollbar { width: 6px; height: 6px; }
+.scrollbar-thin::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 9999px; }
+.scrollbar-thin::-webkit-scrollbar-thumb:hover { background: var(--ice-500); }
 
 .sql-keyword { color: var(--sql-keyword); font-weight: 600; }
 .sql-string  { color: var(--sql-string); }
@@ -166,3 +169,32 @@ body {
 }
 .ic-dots > span:nth-child(2) { animation-delay: 0.18s; }
 .ic-dots > span:nth-child(3) { animation-delay: 0.36s; }
+
+/* Glassmorphism Styles */
+.glass-panel {
+  background: rgba(var(--ink-900), 0.65);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(var(--ice-500), 0.12);
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.4);
+}
+
+.glass-panel-hover {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.glass-panel-hover:hover {
+  border-color: rgba(var(--ice-500), 0.3);
+  box-shadow: 0 8px 30px rgba(var(--ice-500), 0.08);
+  transform: translateY(-1px);
+}
+
+/* Pulsing and glow animations */
+@keyframes pulse-ring {
+  0% { transform: scale(0.95); opacity: 0.5; }
+  50% { transform: scale(1.15); opacity: 0.8; }
+  100% { transform: scale(0.95); opacity: 0.5; }
+}
+
+.pulse-active {
+  animation: pulse-ring 2s infinite ease-in-out;
+}
+
