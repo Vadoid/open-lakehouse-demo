@@ -20,6 +20,12 @@ export default function CatalogView({ focusTable }: { focusTable?: string }) {
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
   useEffect(() => {
+    const h = () => fetchAll();
+    window.addEventListener("ic:step-ran", h);
+    return () => window.removeEventListener("ic:step-ran", h);
+  }, [fetchAll]);
+
+  useEffect(() => {
     if (!focusTable) { setProps(null); return; }
     fetch(`/api/catalog?table=${encodeURIComponent(focusTable)}&ns=market`, { cache: "no-store" })
       .then((r) => r.json()).then((j) => setProps(j?.meta?.metadata ?? null)).catch(() => {});
