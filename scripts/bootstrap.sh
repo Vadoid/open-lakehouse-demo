@@ -11,7 +11,7 @@ for i in $(seq 1 60); do
   sleep 2
 done
 
-echo ">> creating MinIO bucket '${BUCKET}'..."
+echo ">> creating MinIO bucket '${BUCKET}' and setting CORS..."
 # Resolve the network lake-minio is actually attached to instead of trusting
 # ${NETWORK}. This survives daemon/context mismatches and stale names: if the
 # CLI here can inspect lake-minio, the network we read back is guaranteed to
@@ -25,9 +25,30 @@ if ! docker network inspect "${NET}" >/dev/null 2>&1; then
   exit 1
 fi
 echo ">> using network '${NET}'"
+
+CORS_JSON=$(cat <<EOF
+[
+  {
+    "AllowedOrigins": [
+      "http://localhost:3030",
+      "http://localhost:8181",
+      "http://${EXTERNAL_IP}:3030",
+      "http://${EXTERNAL_IP}:8181"
+    ],
+    "AllowedMethods": ["GET", "HEAD", "POST", "PUT", "DELETE"],
+    "AllowedHeaders": ["*"],
+    "ExposeHeaders": ["ETag", "x-amz-version-id"],
+    "MaxAgeSeconds": 3000
+  }
+]
+EOF
+)
+
 docker run --rm --network "${NET}" --entrypoint /bin/sh minio/mc -c "
   mc alias set lake http://lake-minio:9000 '${S3_ACCESS_KEY}' '${S3_SECRET_KEY}' &&
-  mc mb --ignore-existing lake/${BUCKET}
+  mc mb --ignore-existing lake/${BUCKET} &&
+  echo '${CORS_JSON}' > /tmp/cors.json &&
+  mc cors set lake/${BUCKET} /tmp/cors.json
 "
 
 echo ">> bootstrapping Lakekeeper (sets initial admin / first project)..."

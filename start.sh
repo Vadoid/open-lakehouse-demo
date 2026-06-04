@@ -318,4 +318,4 @@ echo
 echo "Stack is up. Endpoints:"
 terraform output
 echo
-echo "Webapp: http://localhost:3030"
+echo "Webapp: http://localhost:3030 (External: http://$(curl -s https://ifconfig.me/ip):3030)"

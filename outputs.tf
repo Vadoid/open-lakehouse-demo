@@ -1,17 +1,17 @@
 output "lakekeeper_ui" {
-  value = "http://localhost:8181/ui/"
+  value = "http://localhost:8181/ui/  (External: http://${local.external_ip}:8181/ui/)"
 }
 
 output "lakekeeper_rest_catalog" {
-  value = "http://localhost:8181/catalog"
+  value = "http://localhost:8181/catalog  (External: http://${local.external_ip}:8181/catalog)"
 }
 
 output "minio_console" {
-  value = "http://localhost:9001  (user: ${var.s3_access_key})"
+  value = "http://localhost:9001  (External: http://${local.external_ip}:9001)  (user: ${var.s3_access_key})"
 }
 
 output "thrift_jdbc" {
-  value = "jdbc:hive2://localhost:10000"
+  value = "jdbc:hive2://localhost:10000  (External: jdbc:hive2://${local.external_ip}:10000)"
 }
 
 output "run_demo" {
@@ -19,5 +19,5 @@ output "run_demo" {
 }
 
 output "webapp_url" {
-  value = "http://localhost:3030"
+  value = "http://localhost:3030  (External: http://${local.external_ip}:3030)"
 }

@@ -4,10 +4,22 @@ terraform {
       source  = "kreuzwerker/docker"
       version = "~> 3.0"
     }
+    http = {
+      source  = "hashicorp/http"
+      version = "~> 3.0"
+    }
   }
 }
 
 provider "docker" {}
+
+data "http" "external_ip" {
+  url = "https://ifconfig.me/ip"
+}
+
+locals {
+  external_ip = chomp(data.http.external_ip.response_body)
+}
 
 resource "docker_network" "lake" {
   name = "lakedemo"
@@ -121,6 +133,7 @@ resource "null_resource" "bootstrap" {
       S3_SECRET_KEY = var.s3_secret_key
       WAREHOUSE     = var.warehouse
       BUCKET        = var.bucket
+      EXTERNAL_IP   = local.external_ip
     }
   }
 }
