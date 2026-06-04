@@ -143,7 +143,7 @@ export default function MinioTree({ prefix, hint, stepId }: { prefix: string; hi
   useEffect(() => {
     const h = (e: Event) => {
       const d = (e as CustomEvent).detail;
-      if (d?.stepId === stepId) fetchData();
+      if (d?.stepId === stepId || d?.stepId === 0) fetchData();
     };
     window.addEventListener("ic:step-ran", h);
     return () => window.removeEventListener("ic:step-ran", h);
