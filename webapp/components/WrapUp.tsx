@@ -78,7 +78,17 @@ export default function WrapUp() {
     finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    fetchData();
+    // Auto-complete step 18 on visit since it is a wrap-up page with no SQL console
+    fetch("/api/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ stepId: 18, isEdited: false }),
+    }).then(() => {
+      window.dispatchEvent(new CustomEvent("ic:step-ran", { detail: { stepId: 18 } }));
+    }).catch(() => {});
+  }, [fetchData]);
 
   return (
     <div className="p-8 max-w-5xl mx-auto space-y-8">
