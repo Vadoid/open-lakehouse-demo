@@ -427,7 +427,7 @@ export default function LineageGraph({ table }: { table: string }) {
                   const y = a.y + a.h / 2;
                   return (
                     <line key={i} x1={a.x} y1={y} x2={b.x + b.w} y2={b.y + b.h / 2}
-                      stroke="#f0abfc" strokeWidth={1.2} strokeDasharray="4 3"
+                      stroke="#f0abfc" strokeWidth={0.8} strokeDasharray="4 3"
                       markerEnd="url(#lg-arrow-dim)" opacity={dim ? 0.18 : 0.85} />
                   );
                 }
@@ -441,7 +441,7 @@ export default function LineageGraph({ table }: { table: string }) {
                 const d = `M ${x1} ${y1} L ${x1} ${midY} L ${x2} ${midY} L ${x2} ${y2}`;
                 return (
                   <path key={i} d={d} fill="none"
-                    stroke="#7aa8c6" strokeWidth={1.2}
+                    stroke="#7aa8c6" strokeWidth={0.8}
                     markerEnd="url(#lg-arrow)" opacity={dim ? 0.18 : 0.85} />
                 );
               })}
@@ -465,9 +465,10 @@ export default function LineageGraph({ table }: { table: string }) {
                      onMouseLeave={() => setHoverId(null)}
                      onClick={() => setSelId(n.id)}
                      style={{ cursor: "pointer", opacity: dim ? 0.25 : 1 }}>
+                    <title>{n.label}</title>
                     <rect x={p.x} y={p.y} width={p.w} height={p.h} rx={6}
                           fill={s.fill} stroke={stroke}
-                          strokeWidth={isSel ? 2 : (opStroke ? 1.8 : 1.2)} />
+                          strokeWidth={isSel ? 1.6 : (opStroke ? 1.3 : 0.8)} />
                     <text x={p.x + 8} y={p.y + 16} fontFamily="ui-monospace, monospace" fontSize={11} fill={s.text}>
                       {shortLabel(n)}
                     </text>
