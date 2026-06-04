@@ -163,10 +163,11 @@ export default function SqlPanel({ step }: { step: Step }) {
     try {
       const currentCfg = cfg ?? loadConfig();
       const runSql = applyConfigForSql(sqlToRun, currentCfg);
+      const isEdited = isSelection || sql.trim() !== step.sql.trim();
       const resp = await fetch("/api/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ stepId: step.id, sql: runSql }),
+        body: JSON.stringify({ stepId: step.id, sql: runSql, isEdited }),
         signal: ctrl.signal,
       });
       if (!resp.body) throw new Error("no stream");
