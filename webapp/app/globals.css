@@ -67,6 +67,42 @@
   --arch-minio-sub:    #e6c4a4;
 
   --arch-pg-foot:     #7aa8c6;
+
+  /* Lineage Graph default (dark) colors */
+  --lg-connector: #7aa8c6;
+  --lg-shadows: #f0abfc;
+
+  --lg-catalog-bg: #0f3340;
+  --lg-catalog-stroke: #5fc4d3;
+  --lg-catalog-fg: #d6f4fa;
+
+  --lg-meta-bg: #062d24;
+  --lg-meta-stroke: #34d399;
+  --lg-meta-fg: #a7f3d0;
+
+  --lg-manifest-list-bg: #3a2a0a;
+  --lg-manifest-list-stroke: #fbbf24;
+  --lg-manifest-list-fg: #fde68a;
+
+  --lg-manifest-bg: #3a3210;
+  --lg-manifest-stroke: #facc15;
+  --lg-manifest-fg: #fef08a;
+
+  --lg-data-bg: #0a2438;
+  --lg-data-stroke: #7dd3fc;
+  --lg-data-fg: #bae6fd;
+
+  --lg-del-puffin-bg: #3b0a3b;
+  --lg-del-puffin-stroke: #f0abfc;
+  --lg-del-puffin-fg: #f5d0fe;
+
+  --lg-del-parquet-bg: #3b0e16;
+  --lg-del-parquet-stroke: #fb7185;
+  --lg-del-parquet-fg: #fecdd3;
+
+  --lg-stats-puffin-bg: #1f1b3a;
+  --lg-stats-puffin-stroke: #a78bfa;
+  --lg-stats-puffin-fg: #ddd6fe;
 }
 
 /* Light palette. Surfaces become near-white slate; the ice ramp inverts so
@@ -136,6 +172,42 @@
   --arch-minio-sub:    #9a3412;
 
   --arch-pg-foot:     #475569;
+
+  /* Lineage Graph light theme colors */
+  --lg-connector: #475569;
+  --lg-shadows: #c084fc;
+
+  --lg-catalog-bg: #e0f2fe;
+  --lg-catalog-stroke: #0284c7;
+  --lg-catalog-fg: #0369a1;
+
+  --lg-meta-bg: #d1fae5;
+  --lg-meta-stroke: #059669;
+  --lg-meta-fg: #047857;
+
+  --lg-manifest-list-bg: #fef3c7;
+  --lg-manifest-list-stroke: #d97706;
+  --lg-manifest-list-fg: #92400e;
+
+  --lg-manifest-bg: #fef9c3;
+  --lg-manifest-stroke: #ca8a04;
+  --lg-manifest-fg: #854d0e;
+
+  --lg-data-bg: #e0f2fe;
+  --lg-data-stroke: #0284c7;
+  --lg-data-fg: #0369a1;
+
+  --lg-del-puffin-bg: #fdf4ff;
+  --lg-del-puffin-stroke: #c084fc;
+  --lg-del-puffin-fg: #86198f;
+
+  --lg-del-parquet-bg: #fff1f2;
+  --lg-del-parquet-stroke: #f43f5e;
+  --lg-del-parquet-fg: #9f1239;
+
+  --lg-stats-puffin-bg: #f5f3ff;
+  --lg-stats-puffin-stroke: #8b5cf6;
+  --lg-stats-puffin-fg: #5b21b6;
 }
 
 html, body { height: 100%; }

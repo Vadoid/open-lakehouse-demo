@@ -18,14 +18,14 @@ const KIND_ORDER: Node["kind"][] = [
 ];
 
 const KIND_STYLE: Record<Node["kind"], { stroke: string; fill: string; text: string; short: string }> = {
-  "catalog":       { stroke: "#5fc4d3", fill: "#0f3340", text: "#d6f4fa", short: "cat" },
-  "metadata-json": { stroke: "#34d399", fill: "#062d24", text: "#a7f3d0", short: "metadata.json" },
-  "manifest-list": { stroke: "#fbbf24", fill: "#3a2a0a", text: "#fde68a", short: "snap-*.avro" },
-  "manifest":      { stroke: "#facc15", fill: "#3a3210", text: "#fef08a", short: "manifest" },
-  "data":          { stroke: "#7dd3fc", fill: "#0a2438", text: "#bae6fd", short: "data parquet" },
-  "delete-puffin": { stroke: "#f0abfc", fill: "#3b0a3b", text: "#f5d0fe", short: "puffin DV" },
-  "delete-parquet":{ stroke: "#fb7185", fill: "#3b0e16", text: "#fecdd3", short: "pos delete" },
-  "stats-puffin":  { stroke: "#a78bfa", fill: "#1f1b3a", text: "#ddd6fe", short: "stats" },
+  "catalog":       { stroke: "var(--lg-catalog-stroke)", fill: "var(--lg-catalog-bg)", text: "var(--lg-catalog-fg)", short: "cat" },
+  "metadata-json": { stroke: "var(--lg-meta-stroke)", fill: "var(--lg-meta-bg)", text: "var(--lg-meta-fg)", short: "metadata.json" },
+  "manifest-list": { stroke: "var(--lg-manifest-list-stroke)", fill: "var(--lg-manifest-list-bg)", text: "var(--lg-manifest-list-fg)", short: "snap-*.avro" },
+  "manifest":      { stroke: "var(--lg-manifest-stroke)", fill: "var(--lg-manifest-bg)", text: "var(--lg-manifest-fg)", short: "manifest" },
+  "data":          { stroke: "var(--lg-data-stroke)", fill: "var(--lg-data-bg)", text: "var(--lg-data-fg)", short: "data parquet" },
+  "delete-puffin": { stroke: "var(--lg-del-puffin-stroke)", fill: "var(--lg-del-puffin-bg)", text: "var(--lg-del-puffin-fg)", short: "puffin DV" },
+  "delete-parquet":{ stroke: "var(--lg-del-parquet-stroke)", fill: "var(--lg-del-parquet-bg)", text: "var(--lg-del-parquet-fg)", short: "pos delete" },
+  "stats-puffin":  { stroke: "var(--lg-stats-puffin-stroke)", fill: "var(--lg-stats-puffin-bg)", text: "var(--lg-stats-puffin-fg)", short: "stats" },
 };
 
 function fmtBytes(n?: number) {
@@ -408,10 +408,10 @@ export default function LineageGraph({ table }: { table: string }) {
             >
               <defs>
                 <marker id="lg-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                  <path d="M0,0 L10,5 L0,10 z" fill="#7aa8c6" />
+                  <path d="M0,0 L10,5 L0,10 z" fill="var(--lg-connector)" />
                 </marker>
                 <marker id="lg-arrow-dim" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                  <path d="M0,0 L10,5 L0,10 z" fill="#f0abfc" />
+                  <path d="M0,0 L10,5 L0,10 z" fill="var(--lg-shadows)" />
                 </marker>
               </defs>
               <g transform={`translate(${pan.x} ${pan.y}) scale(${zoom})`}>
@@ -427,7 +427,7 @@ export default function LineageGraph({ table }: { table: string }) {
                   const y = a.y + a.h / 2;
                   return (
                     <line key={i} x1={a.x} y1={y} x2={b.x + b.w} y2={b.y + b.h / 2}
-                      stroke="#f0abfc" strokeWidth={0.8} strokeDasharray="4 3"
+                      stroke="var(--lg-shadows)" strokeWidth={0.8} strokeDasharray="4 3"
                       markerEnd="url(#lg-arrow-dim)" opacity={dim ? 0.18 : 0.85} />
                   );
                 }
@@ -441,7 +441,7 @@ export default function LineageGraph({ table }: { table: string }) {
                 const d = `M ${x1} ${y1} L ${x1} ${midY} L ${x2} ${midY} L ${x2} ${y2}`;
                 return (
                   <path key={i} d={d} fill="none"
-                    stroke="#7aa8c6" strokeWidth={0.8}
+                    stroke="var(--lg-connector)" strokeWidth={0.8}
                     markerEnd="url(#lg-arrow)" opacity={dim ? 0.18 : 0.85} />
                 );
               })}
@@ -457,7 +457,7 @@ export default function LineageGraph({ table }: { table: string }) {
                   : op === "delete" ? "#fb7185"
                   : op === "overwrite" ? "#fb923c"
                   : null;
-                const stroke = isSel ? "#fff" : (opStroke ?? s.stroke);
+                const stroke = isSel ? (document.documentElement.dataset.theme === "light" ? "#000" : "#fff") : (opStroke ?? s.stroke);
                 return (
                   <g key={n.id}
                      data-node="1"
@@ -472,7 +472,7 @@ export default function LineageGraph({ table }: { table: string }) {
                     <text x={p.x + 8} y={p.y + 16} fontFamily="ui-monospace, monospace" fontSize={11} fill={s.text}>
                       {shortLabel(n)}
                     </text>
-                    <text x={p.x + 8} y={p.y + 30} fontFamily="ui-sans-serif, system-ui" fontSize={9} fill="#94a3b8">
+                    <text x={p.x + 8} y={p.y + 30} fontFamily="ui-sans-serif, system-ui" fontSize={9} fill="rgb(var(--gray-500))">
                       {s.short}
                       {n.kind === "manifest-list" && n.meta?.operation ? ` · ${n.meta.operation}` : ""}
                       {n.bytes ? ` · ${fmtBytes(n.bytes)}` : ""}
