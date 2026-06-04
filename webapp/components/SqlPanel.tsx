@@ -163,7 +163,7 @@ export default function SqlPanel({ step }: { step: Step }) {
     try {
       const currentCfg = cfg ?? loadConfig();
       const runSql = applyConfigForSql(sqlToRun, currentCfg);
-      const isEdited = isSelection || sql.trim() !== step.sql.trim();
+      const isEdited = isSelection || sql.trim() !== lastTemplateRef.current.trim();
       const resp = await fetch("/api/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

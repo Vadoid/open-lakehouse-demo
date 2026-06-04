@@ -49,7 +49,7 @@ export default function Home() {
           <span>Apache Iceberg Spec V3</span>
         </div>
         <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-ice-300 via-ice-100 to-ice-400">
-          An Open Lakehouse Demo
+          Open Lakehouse Demo
         </h1>
         <p className="text-sm md:text-base text-gray-300 leading-relaxed max-w-3xl">
           A fully self-contained open lakehouse running locally on Apache Iceberg{" "}
