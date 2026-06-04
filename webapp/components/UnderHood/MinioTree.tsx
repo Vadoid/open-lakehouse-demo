@@ -50,12 +50,12 @@ function fmtSize(n: number) {
 }
 
 function kindOf(name: string): { label: string; cls: string } | null {
-  if (name.endsWith(".puffin")) return { label: "puffin DV", cls: "text-fuchsia-300 bg-fuchsia-900/30 border-fuchsia-700/40" };
-  if (name.endsWith(".parquet")) return { label: "parquet", cls: "text-sky-300 bg-sky-900/30 border-sky-700/40" };
-  if (name.endsWith(".metadata.json")) return { label: "metadata", cls: "text-emerald-300 bg-emerald-900/30 border-emerald-700/40" };
-  if (name.endsWith(".avro") && name.includes("snap-")) return { label: "snapshot list", cls: "text-amber-300 bg-amber-900/30 border-amber-700/40" };
-  if (name.endsWith(".avro")) return { label: "manifest", cls: "text-yellow-300 bg-yellow-900/30 border-yellow-700/40" };
-  if (name.endsWith(".stats")) return { label: "stats", cls: "text-gray-300 bg-gray-900/30 border-gray-700/40" };
+  if (name.endsWith(".puffin")) return { label: "puffin DV", cls: "text-fuchsia-700 dark:text-fuchsia-300 bg-fuchsia-100 dark:bg-fuchsia-900/30 border-fuchsia-200 dark:border-fuchsia-700/40" };
+  if (name.endsWith(".parquet")) return { label: "parquet", cls: "text-sky-700 dark:text-sky-300 bg-sky-100 dark:bg-sky-900/30 border-sky-200 dark:border-sky-700/40" };
+  if (name.endsWith(".metadata.json")) return { label: "metadata", cls: "text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/30 border-emerald-200 dark:border-emerald-700/40" };
+  if (name.endsWith(".avro") && name.includes("snap-")) return { label: "snapshot list", cls: "text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/30 border-amber-200 dark:border-amber-700/40" };
+  if (name.endsWith(".avro")) return { label: "manifest", cls: "text-yellow-800 dark:text-yellow-300 bg-yellow-100 dark:bg-yellow-900/30 border-yellow-200 dark:border-yellow-700/40" };
+  if (name.endsWith(".stats")) return { label: "stats", cls: "text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-900/30 border-gray-200 dark:border-gray-700/40" };
   return null;
 }
 
@@ -85,7 +85,7 @@ function NodeView({ node, depth, openMap, toggle }: {
       <div className={`flex items-center gap-2 font-mono text-xs py-0.5 pr-1 rounded ${rowCls}`}
            style={{ paddingLeft: depth * 12 + 4 }}>
         <span className={`w-3 text-center ${g.cls}`}>{g.ch}</span>
-        <span className="text-gray-300 truncate">{node.name}</span>
+        <span className="text-gray-100 dark:text-gray-300 truncate">{node.name}</span>
         {k && <span className={`text-[10px] px-1.5 py-0.5 rounded border ${k.cls}`}>{k.label}</span>}
         <span className="ml-auto text-[10px] text-gray-500 shrink-0">{fmtSize(node.size ?? 0)}</span>
       </div>
@@ -122,7 +122,7 @@ function countFiles(n: TreeNode): number {
   return c;
 }
 
-export default function MinioTree({ prefix, hint, stepId }: { prefix: string; hint?: string; stepId: number }) {
+export default function MinioTree({ prefix, hint, stepId, borderless = false }: { prefix: string; hint?: string; stepId: number; borderless?: boolean }) {
   const [data, setData] = useState<Resp | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [openMap, setOpenMap] = useState<Set<string>>(new Set());
@@ -143,7 +143,7 @@ export default function MinioTree({ prefix, hint, stepId }: { prefix: string; hi
   useEffect(() => {
     const h = (e: Event) => {
       const d = (e as CustomEvent).detail;
-      if (d?.stepId === stepId) fetchData();
+      if (d?.stepId === stepId || d?.stepId === 0) fetchData();
     };
     window.addEventListener("ic:step-ran", h);
     return () => window.removeEventListener("ic:step-ran", h);
@@ -160,17 +160,30 @@ export default function MinioTree({ prefix, hint, stepId }: { prefix: string; hi
   }, [data]);
 
   return (
-    <div className="rounded border border-ink-700 bg-ink-900/60">
-      <div className="flex items-center justify-between border-b border-ink-700 px-3 py-2">
-        <div className="text-xs uppercase tracking-wider text-gray-500">MinIO file tree</div>
-        <div className="flex items-center gap-2">
-          <label className="text-[10px] text-gray-400 flex items-center gap-1">
-            <input type="checkbox" checked={diffOn} onChange={(e) => setDiffOn(e.target.checked)} />
-            highlight diff
-          </label>
-          <button onClick={fetchData} className="text-[11px] text-ice-500 hover:text-ice-100">refresh</button>
+    <div className={borderless ? "" : "rounded border border-ink-700 bg-ink-900/60"}>
+      {!borderless ? (
+        <div className="flex items-center justify-between border-b border-ink-700 px-3 py-2">
+          <div className="text-xs uppercase tracking-wider text-gray-500">MinIO file tree</div>
+          <div className="flex items-center gap-2">
+            <label className="text-[10px] text-gray-400 flex items-center gap-1">
+              <input type="checkbox" checked={diffOn} onChange={(e) => setDiffOn(e.target.checked)} />
+              highlight diff
+            </label>
+            <button onClick={fetchData} className="text-[11px] text-ice-500 hover:text-ice-100">refresh</button>
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="flex items-center justify-between border-b border-ink-700/60 px-3 py-1.5 bg-ink-950/20">
+          <div className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider">Storage Tree</div>
+          <div className="flex items-center gap-2">
+            <label className="text-[10px] text-gray-400 flex items-center gap-1">
+              <input type="checkbox" checked={diffOn} onChange={(e) => setDiffOn(e.target.checked)} />
+              highlight diff
+            </label>
+            <button onClick={fetchData} className="text-[10px] text-ice-500 hover:text-ice-100">refresh</button>
+          </div>
+        </div>
+      )}
       {hint && <div className="px-3 py-1.5 text-[11px] text-gray-500 border-b border-ink-700/60">{hint}</div>}
       <div className="px-3 py-1.5 text-[11px] text-gray-500 border-b border-ink-700/60 font-mono">
         {prefix} · {data?.count ?? "…"} objects

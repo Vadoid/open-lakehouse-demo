@@ -67,6 +67,42 @@
   --arch-minio-sub:    #e6c4a4;
 
   --arch-pg-foot:     #7aa8c6;
+
+  /* Lineage Graph default (dark) colors */
+  --lg-connector: #7aa8c6;
+  --lg-shadows: #f0abfc;
+
+  --lg-catalog-bg: #0f3340;
+  --lg-catalog-stroke: #5fc4d3;
+  --lg-catalog-fg: #d6f4fa;
+
+  --lg-meta-bg: #062d24;
+  --lg-meta-stroke: #34d399;
+  --lg-meta-fg: #a7f3d0;
+
+  --lg-manifest-list-bg: #3a2a0a;
+  --lg-manifest-list-stroke: #fbbf24;
+  --lg-manifest-list-fg: #fde68a;
+
+  --lg-manifest-bg: #3a3210;
+  --lg-manifest-stroke: #facc15;
+  --lg-manifest-fg: #fef08a;
+
+  --lg-data-bg: #0a2438;
+  --lg-data-stroke: #7dd3fc;
+  --lg-data-fg: #bae6fd;
+
+  --lg-del-puffin-bg: #3b0a3b;
+  --lg-del-puffin-stroke: #f0abfc;
+  --lg-del-puffin-fg: #f5d0fe;
+
+  --lg-del-parquet-bg: #3b0e16;
+  --lg-del-parquet-stroke: #fb7185;
+  --lg-del-parquet-fg: #fecdd3;
+
+  --lg-stats-puffin-bg: #1f1b3a;
+  --lg-stats-puffin-stroke: #a78bfa;
+  --lg-stats-puffin-fg: #ddd6fe;
 }
 
 /* Light palette. Surfaces become near-white slate; the ice ramp inverts so
@@ -136,17 +172,56 @@
   --arch-minio-sub:    #9a3412;
 
   --arch-pg-foot:     #475569;
+
+  /* Lineage Graph light theme colors */
+  --lg-connector: #475569;
+  --lg-shadows: #c084fc;
+
+  --lg-catalog-bg: #e0f2fe;
+  --lg-catalog-stroke: #0284c7;
+  --lg-catalog-fg: #0369a1;
+
+  --lg-meta-bg: #d1fae5;
+  --lg-meta-stroke: #059669;
+  --lg-meta-fg: #047857;
+
+  --lg-manifest-list-bg: #fef3c7;
+  --lg-manifest-list-stroke: #d97706;
+  --lg-manifest-list-fg: #92400e;
+
+  --lg-manifest-bg: #fef9c3;
+  --lg-manifest-stroke: #ca8a04;
+  --lg-manifest-fg: #854d0e;
+
+  --lg-data-bg: #e0f2fe;
+  --lg-data-stroke: #0284c7;
+  --lg-data-fg: #0369a1;
+
+  --lg-del-puffin-bg: #fdf4ff;
+  --lg-del-puffin-stroke: #c084fc;
+  --lg-del-puffin-fg: #86198f;
+
+  --lg-del-parquet-bg: #fff1f2;
+  --lg-del-parquet-stroke: #f43f5e;
+  --lg-del-parquet-fg: #9f1239;
+
+  --lg-stats-puffin-bg: #f5f3ff;
+  --lg-stats-puffin-stroke: #8b5cf6;
+  --lg-stats-puffin-fg: #5b21b6;
 }
 
 html, body { height: 100%; }
 body {
-  background: linear-gradient(180deg, var(--body-bg-from) 0%, var(--body-bg-to) 100%);
+  background: radial-gradient(circle at top right, rgba(29, 78, 216, 0.08), transparent 40%),
+              radial-gradient(circle at bottom left, rgba(59, 130, 246, 0.05), transparent 45%),
+              linear-gradient(180deg, var(--body-bg-from) 0%, var(--body-bg-to) 100%);
   color: var(--body-fg);
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
-.scrollbar-thin::-webkit-scrollbar { width: 8px; height: 8px; }
-.scrollbar-thin::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 4px; }
+.scrollbar-thin::-webkit-scrollbar { width: 6px; height: 6px; }
+.scrollbar-thin::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 9999px; }
+.scrollbar-thin::-webkit-scrollbar-thumb:hover { background: var(--ice-500); }
 
 .sql-keyword { color: var(--sql-keyword); font-weight: 600; }
 .sql-string  { color: var(--sql-string); }
@@ -166,3 +241,32 @@ body {
 }
 .ic-dots > span:nth-child(2) { animation-delay: 0.18s; }
 .ic-dots > span:nth-child(3) { animation-delay: 0.36s; }
+
+/* Glassmorphism Styles */
+.glass-panel {
+  background: rgba(var(--ink-900), 0.65);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(var(--ice-500), 0.12);
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.4);
+}
+
+.glass-panel-hover {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.glass-panel-hover:hover {
+  border-color: rgba(var(--ice-500), 0.3);
+  box-shadow: 0 8px 30px rgba(var(--ice-500), 0.08);
+  transform: translateY(-1px);
+}
+
+/* Pulsing and glow animations */
+@keyframes pulse-ring {
+  0% { transform: scale(0.95); opacity: 0.5; }
+  50% { transform: scale(1.15); opacity: 0.8; }
+  100% { transform: scale(0.95); opacity: 0.5; }
+}
+
+.pulse-active {
+  animation: pulse-ring 2s infinite ease-in-out;
+}
+

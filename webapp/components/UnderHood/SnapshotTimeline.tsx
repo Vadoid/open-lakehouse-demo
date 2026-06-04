@@ -11,7 +11,7 @@ const OP_COLOR: Record<string, string> = {
   replace: "bg-fuchsia-500",
 };
 
-export default function SnapshotTimeline({ table }: { table: string }) {
+export default function SnapshotTimeline({ table, borderless = false }: { table: string; borderless?: boolean }) {
   const [r, setR] = useState<Resp | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
@@ -32,11 +32,18 @@ export default function SnapshotTimeline({ table }: { table: string }) {
   }, [fetchData]);
 
   return (
-    <div className="rounded border border-ink-700 bg-ink-900/60">
-      <div className="flex items-center justify-between border-b border-ink-700 px-3 py-2">
-        <div className="text-xs uppercase tracking-wider text-gray-500">Snapshot timeline · {table}</div>
-        <button onClick={fetchData} className="text-[11px] text-ice-500 hover:text-ice-100">refresh</button>
-      </div>
+    <div className={borderless ? "" : "rounded border border-ink-700 bg-ink-900/60"}>
+      {!borderless ? (
+        <div className="flex items-center justify-between border-b border-ink-700 px-3 py-2">
+          <div className="text-xs uppercase tracking-wider text-gray-500">Snapshot timeline · {table}</div>
+          <button onClick={fetchData} className="text-[11px] text-ice-500 hover:text-ice-100">refresh</button>
+        </div>
+      ) : (
+        <div className="flex items-center justify-between border-b border-ink-700/60 px-3 py-1.5 bg-ink-950/20">
+          <div className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider">Commit Timeline</div>
+          <button onClick={fetchData} className="text-[10px] text-ice-500 hover:text-ice-100">refresh</button>
+        </div>
+      )}
       {err && <div className="p-3 text-red-400 text-xs font-mono whitespace-pre-wrap">{err}</div>}
       {r && (
         <div className="p-3">

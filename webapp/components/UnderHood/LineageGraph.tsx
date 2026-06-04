@@ -18,14 +18,14 @@ const KIND_ORDER: Node["kind"][] = [
 ];
 
 const KIND_STYLE: Record<Node["kind"], { stroke: string; fill: string; text: string; short: string }> = {
-  "catalog":       { stroke: "#5fc4d3", fill: "#0f3340", text: "#d6f4fa", short: "cat" },
-  "metadata-json": { stroke: "#34d399", fill: "#062d24", text: "#a7f3d0", short: "metadata.json" },
-  "manifest-list": { stroke: "#fbbf24", fill: "#3a2a0a", text: "#fde68a", short: "snap-*.avro" },
-  "manifest":      { stroke: "#facc15", fill: "#3a3210", text: "#fef08a", short: "manifest" },
-  "data":          { stroke: "#7dd3fc", fill: "#0a2438", text: "#bae6fd", short: "data parquet" },
-  "delete-puffin": { stroke: "#f0abfc", fill: "#3b0a3b", text: "#f5d0fe", short: "puffin DV" },
-  "delete-parquet":{ stroke: "#fb7185", fill: "#3b0e16", text: "#fecdd3", short: "pos delete" },
-  "stats-puffin":  { stroke: "#a78bfa", fill: "#1f1b3a", text: "#ddd6fe", short: "stats" },
+  "catalog":       { stroke: "var(--lg-catalog-stroke)", fill: "var(--lg-catalog-bg)", text: "var(--lg-catalog-fg)", short: "cat" },
+  "metadata-json": { stroke: "var(--lg-meta-stroke)", fill: "var(--lg-meta-bg)", text: "var(--lg-meta-fg)", short: "metadata.json" },
+  "manifest-list": { stroke: "var(--lg-manifest-list-stroke)", fill: "var(--lg-manifest-list-bg)", text: "var(--lg-manifest-list-fg)", short: "snap-*.avro" },
+  "manifest":      { stroke: "var(--lg-manifest-stroke)", fill: "var(--lg-manifest-bg)", text: "var(--lg-manifest-fg)", short: "manifest" },
+  "data":          { stroke: "var(--lg-data-stroke)", fill: "var(--lg-data-bg)", text: "var(--lg-data-fg)", short: "data parquet" },
+  "delete-puffin": { stroke: "var(--lg-del-puffin-stroke)", fill: "var(--lg-del-puffin-bg)", text: "var(--lg-del-puffin-fg)", short: "puffin DV" },
+  "delete-parquet":{ stroke: "var(--lg-del-parquet-stroke)", fill: "var(--lg-del-parquet-bg)", text: "var(--lg-del-parquet-fg)", short: "pos delete" },
+  "stats-puffin":  { stroke: "var(--lg-stats-puffin-stroke)", fill: "var(--lg-stats-puffin-bg)", text: "var(--lg-stats-puffin-fg)", short: "stats" },
 };
 
 function fmtBytes(n?: number) {
@@ -342,22 +342,44 @@ export default function LineageGraph({ table }: { table: string }) {
             <input type="checkbox" checked={showOnlyCurrent} onChange={(e) => setShowOnlyCurrent(e.target.checked)} />
             only current snapshot
           </label>
-          <div className="flex items-center gap-1 text-[10px] text-gray-400">
+          <div className="flex items-center gap-1.5 text-[10px] text-gray-400">
             <button onClick={() => setZoom((z) => clampZoom(z / 1.2))}
-                    className="px-1.5 py-0.5 rounded border border-ink-700 hover:text-ice-100 hover:border-ice-500"
-                    title="Zoom out (Ctrl+wheel)">−</button>
-            <span className="font-mono tabular-nums w-9 text-center">{Math.round(zoom * 100)}%</span>
+                    className="p-1 rounded border border-ink-700 bg-ink-900/60 hover:text-ice-100 hover:border-ice-500 transition-colors flex items-center justify-center"
+                    title="Zoom out (Ctrl+wheel)">
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M20 12H4" />
+              </svg>
+            </button>
+            <span className="font-mono tabular-nums w-10 text-center select-none text-gray-300">{Math.round(zoom * 100)}%</span>
             <button onClick={() => setZoom((z) => clampZoom(z * 1.2))}
-                    className="px-1.5 py-0.5 rounded border border-ink-700 hover:text-ice-100 hover:border-ice-500"
-                    title="Zoom in (Ctrl+wheel)">+</button>
+                    className="p-1 rounded border border-ink-700 bg-ink-900/60 hover:text-ice-100 hover:border-ice-500 transition-colors flex items-center justify-center"
+                    title="Zoom in (Ctrl+wheel)">
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+            </button>
             <button onClick={resetView}
-                    className="px-1.5 py-0.5 rounded border border-ink-700 hover:text-ice-100 hover:border-ice-500"
-                    title="Reset zoom + pan">fit</button>
+                    className="p-1 rounded border border-ink-700 bg-ink-900/60 hover:text-ice-100 hover:border-ice-500 transition-colors flex items-center justify-center"
+                    title="Reset zoom + pan">
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 4h5M4 4v5m0-5l5 5m11-5h-5m5 0v5m0-5l-5 5M4 20h5m-5 0v-5m0 5l5-5m11 5h-5m5 0v-5m0 5l-5-5" />
+              </svg>
+            </button>
             <button onClick={() => setTall((t) => !t)}
-                    className="px-1.5 py-0.5 rounded border border-ink-700 hover:text-ice-100 hover:border-ice-500"
-                    title="Toggle panel height">{tall ? "shrink" : "expand"}</button>
+                    className="p-1 rounded border border-ink-700 bg-ink-900/60 hover:text-ice-100 hover:border-ice-500 transition-colors flex items-center justify-center"
+                    title="Toggle panel height">
+              {tall ? (
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              ) : (
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
+                </svg>
+              )}
+            </button>
           </div>
-          <button onClick={fetchData} className="text-[11px] text-ice-500 hover:text-ice-100">refresh</button>
+          <button onClick={fetchData} className="text-[11px] text-ice-500 hover:text-ice-300 font-semibold transition-colors">refresh</button>
         </div>
       </div>
       {err && <div className="p-3 text-red-400 text-xs font-mono whitespace-pre-wrap">{err}</div>}
@@ -386,10 +408,10 @@ export default function LineageGraph({ table }: { table: string }) {
             >
               <defs>
                 <marker id="lg-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                  <path d="M0,0 L10,5 L0,10 z" fill="#7aa8c6" />
+                  <path d="M0,0 L10,5 L0,10 z" fill="var(--lg-connector)" />
                 </marker>
                 <marker id="lg-arrow-dim" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                  <path d="M0,0 L10,5 L0,10 z" fill="#f0abfc" />
+                  <path d="M0,0 L10,5 L0,10 z" fill="var(--lg-shadows)" />
                 </marker>
               </defs>
               <g transform={`translate(${pan.x} ${pan.y}) scale(${zoom})`}>
@@ -405,7 +427,7 @@ export default function LineageGraph({ table }: { table: string }) {
                   const y = a.y + a.h / 2;
                   return (
                     <line key={i} x1={a.x} y1={y} x2={b.x + b.w} y2={b.y + b.h / 2}
-                      stroke="#f0abfc" strokeWidth={1.2} strokeDasharray="4 3"
+                      stroke="var(--lg-shadows)" strokeWidth={0.8} strokeDasharray="4 3"
                       markerEnd="url(#lg-arrow-dim)" opacity={dim ? 0.18 : 0.85} />
                   );
                 }
@@ -419,7 +441,7 @@ export default function LineageGraph({ table }: { table: string }) {
                 const d = `M ${x1} ${y1} L ${x1} ${midY} L ${x2} ${midY} L ${x2} ${y2}`;
                 return (
                   <path key={i} d={d} fill="none"
-                    stroke="#7aa8c6" strokeWidth={1.2}
+                    stroke="var(--lg-connector)" strokeWidth={0.8}
                     markerEnd="url(#lg-arrow)" opacity={dim ? 0.18 : 0.85} />
                 );
               })}
@@ -435,7 +457,7 @@ export default function LineageGraph({ table }: { table: string }) {
                   : op === "delete" ? "#fb7185"
                   : op === "overwrite" ? "#fb923c"
                   : null;
-                const stroke = isSel ? "#fff" : (opStroke ?? s.stroke);
+                const stroke = isSel ? (document.documentElement.dataset.theme === "light" ? "#000" : "#fff") : (opStroke ?? s.stroke);
                 return (
                   <g key={n.id}
                      data-node="1"
@@ -443,13 +465,14 @@ export default function LineageGraph({ table }: { table: string }) {
                      onMouseLeave={() => setHoverId(null)}
                      onClick={() => setSelId(n.id)}
                      style={{ cursor: "pointer", opacity: dim ? 0.25 : 1 }}>
+                    <title>{n.label}</title>
                     <rect x={p.x} y={p.y} width={p.w} height={p.h} rx={6}
                           fill={s.fill} stroke={stroke}
-                          strokeWidth={isSel ? 2 : (opStroke ? 1.8 : 1.2)} />
+                          strokeWidth={isSel ? 1.6 : (opStroke ? 1.3 : 0.8)} />
                     <text x={p.x + 8} y={p.y + 16} fontFamily="ui-monospace, monospace" fontSize={11} fill={s.text}>
                       {shortLabel(n)}
                     </text>
-                    <text x={p.x + 8} y={p.y + 30} fontFamily="ui-sans-serif, system-ui" fontSize={9} fill="#94a3b8">
+                    <text x={p.x + 8} y={p.y + 30} fontFamily="ui-sans-serif, system-ui" fontSize={9} fill="rgb(var(--gray-500))">
                       {s.short}
                       {n.kind === "manifest-list" && n.meta?.operation ? ` · ${n.meta.operation}` : ""}
                       {n.bytes ? ` · ${fmtBytes(n.bytes)}` : ""}
@@ -463,16 +486,16 @@ export default function LineageGraph({ table }: { table: string }) {
           </div>
 
           {selNode && (
-          <div className="col-span-4 border-l border-ink-700 max-h-[420px] overflow-auto scrollbar-thin p-3 text-xs">
-              <div className="space-y-2">
-                <div className="flex items-start justify-between gap-2">
+            <div className="col-span-4 border-l border-ink-700/60 bg-ink-950/20 max-h-[420px] overflow-auto scrollbar-thin p-4 text-xs backdrop-blur-md transition-all duration-300 ease-out">
+              <div className="space-y-3.5">
+                <div className="flex items-center justify-between gap-3 border-b border-ink-700/60 pb-2.5">
                   <div>
-                    <span className="text-[10px] uppercase tracking-wider text-gray-500">Kind</span>
-                    <div className="text-ice-200 font-semibold">{KIND_STYLE[selNode.kind].short}</div>
+                    <span className="text-[10px] uppercase font-semibold tracking-wider text-gray-500">Kind</span>
+                    <div className="text-ice-300 font-bold text-sm tracking-tight">{KIND_STYLE[selNode.kind].short}</div>
                   </div>
                   <button onClick={() => setSelId(null)}
-                          className="text-gray-500 hover:text-ice-100 text-[14px] leading-none"
-                          title="Close detail">×</button>
+                          className="w-6 h-6 rounded-full hover:bg-ink-800 flex items-center justify-center text-gray-400 hover:text-gray-200 transition-colors text-[18px] leading-none"
+                          title="Close details">×</button>
                 </div>
                 {!selNode.meta?.collapsed && (
                   <div>

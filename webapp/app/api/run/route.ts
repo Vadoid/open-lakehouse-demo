@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
 
   const customSql = typeof body.sql === "string" ? body.sql : null;
   const sqlToRun = customSql ?? step.sql;
-  const edited = customSql !== null && customSql.trim() !== step.sql.trim();
+  const edited = typeof body.isEdited === "boolean" ? body.isEdited : (customSql !== null && customSql.trim() !== step.sql.trim());
 
   const prefix = await resolveStepPrefix(step).catch(() => "demo/");
   let filesBefore;

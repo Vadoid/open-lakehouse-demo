@@ -64,10 +64,25 @@ export default function SqlPanel({ step }: { step: Step }) {
   // (formatted "100K" would be invalid SQL). Prose elsewhere uses applyConfig.
   const baseSql = cfg ? applyConfigForSql(step.sql, cfg) : step.sql;
   const [sql, setSql] = useState<string>(step.sql);
+  const [copied, setCopied] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: "info" | "success" | "error" } | null>(null);
   const taRef = useRef<HTMLTextAreaElement | null>(null);
   const preRef = useRef<HTMLPreElement | null>(null);
+  const lineNosRef = useRef<HTMLDivElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const edited = sql.trim() !== baseSql.trim();
+
+  // Keyboard shortcut Ctrl/Cmd + Enter to run query
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+        e.preventDefault();
+        run();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [sql, running, cfg]);
 
   useEffect(() => {
     if (!progress) return;
@@ -126,15 +141,33 @@ export default function SqlPanel({ step }: { step: Step }) {
   async function run() {
     if (running) return;
     setRunning(true); setResults([]); setStmtSql({}); setDoneMs(null); setErr(null); setDiff(null);
+    
+    const ta = taRef.current;
+    let sqlToRun = sql;
+    let isSelection = false;
+    if (ta) {
+      const start = ta.selectionStart;
+      const end = ta.selectionEnd;
+      if (start !== end) {
+        sqlToRun = sql.substring(start, end);
+        isSelection = true;
+      }
+    }
+
+    setToast({ 
+      message: isSelection ? "Running selected SQL statements..." : "Running SQL statements...", 
+      type: "info" 
+    });
     const ctrl = new AbortController();
     abortRef.current = ctrl;
     try {
       const currentCfg = cfg ?? loadConfig();
-      const runSql = applyConfigForSql(sql, currentCfg);
+      const runSql = applyConfigForSql(sqlToRun, currentCfg);
+      const isEdited = isSelection || sql.trim() !== lastTemplateRef.current.trim();
       const resp = await fetch("/api/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ stepId: step.id, sql: runSql }),
+        body: JSON.stringify({ stepId: step.id, sql: runSql, isEdited }),
         signal: ctrl.signal,
       });
       if (!resp.body) throw new Error("no stream");
@@ -159,7 +192,9 @@ export default function SqlPanel({ step }: { step: Step }) {
         }
       }
     } catch (e: any) {
-      setErr(e?.message ?? String(e));
+      const errorMsg = e?.message ?? String(e);
+      setErr(errorMsg);
+      setToast({ message: `Query execution failed: ${errorMsg}`, type: "error" });
     } finally {
       setRunning(false);
       window.dispatchEvent(new CustomEvent("ic:step-ran", { detail: { stepId: step.id } }));
@@ -171,22 +206,24 @@ export default function SqlPanel({ step }: { step: Step }) {
       case "start":
         setProgress({ stmt: msg.stmtIdx + 1, total: msg.total, elapsedMs: 0, startedAt: Date.now() });
         setStmtSql((m) => ({ ...m, [msg.stmtIdx]: msg.sql }));
+        setToast({ message: `Executing statement ${msg.stmtIdx + 1} of ${msg.total}...`, type: "info" });
         break;
       case "running":
         setProgress((p) => p ? { ...p, elapsedMs: msg.elapsedMs } : p);
         break;
       case "result":
-        if (msg.columns.length > 0) {
-          setResults((r) => [...r, { stmtIdx: msg.stmtIdx, columns: msg.columns, data: msg.data }]);
-        }
+        setResults((r) => [...r, { stmtIdx: msg.stmtIdx, columns: msg.columns, data: msg.data }]);
         break;
       case "done":
         setDoneMs(msg.durationMs);
         setProgress(null);
+        setToast({ message: `Query executed successfully in ${Math.round(msg.durationMs / 100) / 10}s!`, type: "success" });
+        setTimeout(() => setToast(prev => prev?.type === "success" ? null : prev), 4000);
         break;
       case "error":
         setErr(msg.message);
         setProgress(null);
+        setToast({ message: `Query execution failed: ${msg.message}`, type: "error" });
         break;
       case "diff":
         setDiff({ added: msg.added.length, removed: msg.removed.length, changed: msg.changed.length });
@@ -212,6 +249,31 @@ export default function SqlPanel({ step }: { step: Step }) {
           {doneMs !== null && !running && !err && (
             <span className="text-xs text-emerald-400">done in {Math.round(doneMs / 1000)}s</span>
           )}
+          <button
+            onClick={() => {
+              navigator.clipboard.writeText(sql);
+              setCopied(true);
+              setTimeout(() => setCopied(false), 2000);
+            }}
+            className="px-2 py-1 rounded text-xs text-gray-400 hover:text-ice-200 border border-ink-700 hover:border-ice-500/60 transition flex items-center gap-1"
+            title="Copy SQL to clipboard"
+          >
+            {copied ? (
+              <>
+                <svg className="w-3.5 h-3.5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+                <span>Copied!</span>
+              </>
+            ) : (
+              <>
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                </svg>
+                <span>Copy</span>
+              </>
+            )}
+          </button>
           {edited && !running && (
             <button
               onClick={() => setSql(baseSql)}
@@ -239,35 +301,57 @@ export default function SqlPanel({ step }: { step: Step }) {
         </div>
       </div>
 
-      <div className="relative font-mono text-[0.78rem] leading-relaxed">
-        <pre
-          ref={preRef}
-          aria-hidden
-          className="absolute inset-0 m-0 p-4 overflow-hidden whitespace-pre text-gray-300 pointer-events-none"
-          style={{ fontFamily: "inherit", fontSize: "inherit", lineHeight: "inherit" }}
-          dangerouslySetInnerHTML={{ __html: highlight(sql) + "\n" }}
-        />
-        <textarea
-          ref={taRef}
-          value={sql}
-          onChange={(e) => setSql(e.target.value)}
-          onScroll={(e) => {
-            if (preRef.current) {
-              preRef.current.scrollTop = (e.target as HTMLTextAreaElement).scrollTop;
-              preRef.current.scrollLeft = (e.target as HTMLTextAreaElement).scrollLeft;
-            }
-          }}
-          spellCheck={false}
-          rows={Math.max(6, sql.split("\n").length)}
-          className="relative block w-full p-4 m-0 bg-transparent text-transparent resize-y outline-none whitespace-pre overflow-auto scrollbar-thin selection:bg-ice-500/40"
+      <div className="flex font-mono text-[0.78rem] relative bg-ink-950/60 rounded-b-md overflow-hidden">
+        {/* Line Numbers */}
+        <div
+          ref={lineNosRef}
+          className="flex-none py-4 pl-3 pr-2 text-right text-gray-600 bg-ink-900/30 border-r border-ink-700/40 select-none overflow-hidden"
           style={{
-            fontFamily: "inherit",
             fontSize: "inherit",
-            lineHeight: "inherit",
+            lineHeight: "20px",
             minHeight: "8rem",
-            caretColor: "#dcecff",
           }}
-        />
+        >
+          {Array.from({ length: Math.max(6, sql.split("\n").length) }).map((_, i) => (
+            <div key={i} className="h-5" style={{ height: "20px", lineHeight: "20px" }}>{i + 1}</div>
+          ))}
+        </div>
+
+        {/* Editor Area */}
+        <div className="flex-1 relative overflow-hidden">
+          <pre
+            ref={preRef}
+            aria-hidden
+            className="absolute inset-0 m-0 p-4 overflow-hidden whitespace-pre text-gray-300 pointer-events-none"
+            style={{ fontFamily: "inherit", fontSize: "inherit", lineHeight: "20px" }}
+            dangerouslySetInnerHTML={{ __html: highlight(sql) + "\n" }}
+          />
+          <textarea
+            ref={taRef}
+            value={sql}
+            onChange={(e) => setSql(e.target.value)}
+            onScroll={(e) => {
+              const target = e.target as HTMLTextAreaElement;
+              if (preRef.current) {
+                preRef.current.scrollTop = target.scrollTop;
+                preRef.current.scrollLeft = target.scrollLeft;
+              }
+              if (lineNosRef.current) {
+                lineNosRef.current.scrollTop = target.scrollTop;
+              }
+            }}
+            spellCheck={false}
+            rows={Math.max(6, sql.split("\n").length)}
+            className="relative block w-full p-4 m-0 bg-transparent text-transparent resize-y outline-none whitespace-pre overflow-auto scrollbar-thin selection:bg-ice-500/40"
+            style={{
+              fontFamily: "inherit",
+              fontSize: "inherit",
+              lineHeight: "20px",
+              minHeight: "8rem",
+              caretColor: "#dcecff",
+            }}
+          />
+        </div>
       </div>
 
       {err && (
@@ -293,6 +377,7 @@ export default function SqlPanel({ step }: { step: Step }) {
           <div className="p-3 space-y-3 bg-ink-900/40">
             {results.map((r, i) => {
               const snippet = (stmtSql[r.stmtIdx] ?? "").replace(/\s+/g, " ").trim().slice(0, 120);
+              const isQuery = r.columns && r.columns.length > 0;
               return (
                 <div key={i} className="rounded-md border border-ink-700 bg-ink-900/80 shadow-sm overflow-hidden">
                   <div className="flex items-center gap-2 px-3 py-1.5 bg-ink-800/60 border-b border-ink-700">
@@ -300,9 +385,17 @@ export default function SqlPanel({ step }: { step: Step }) {
                     {snippet && (
                       <code className="text-[11px] font-mono text-gray-400 truncate flex-1">{snippet}{snippet.length === 120 ? "…" : ""}</code>
                     )}
-                    <span className="text-[10px] text-gray-500 flex-none">{r.data.length} row{r.data.length === 1 ? "" : "s"}</span>
+                    {isQuery ? (
+                      <span className="text-[10px] text-gray-500 flex-none">{r.data.length} row{r.data.length === 1 ? "" : "s"}</span>
+                    ) : (
+                      <span className="text-[10px] text-emerald-400 font-semibold flex-none">Success</span>
+                    )}
                   </div>
-                  <ResultTable columns={r.columns} data={r.data} />
+                  {isQuery ? (
+                    <ResultTable columns={r.columns} data={r.data} />
+                  ) : (
+                    <div className="px-3 py-2 text-gray-500 italic text-[11px] bg-ink-900/10">Statement executed successfully (no result set returned).</div>
+                  )}
                 </div>
               );
             })}
@@ -310,6 +403,44 @@ export default function SqlPanel({ step }: { step: Step }) {
         </div>
       )}
       </div>
+      {toast && (
+        <div className="fixed bottom-6 right-6 z-50 max-w-sm rounded-lg shadow-2xl border p-3 flex items-start gap-2.5 backdrop-blur-md transition-all duration-300 bg-ink-950/90 border-ink-800/80 animate-in fade-in slide-in-from-bottom-5">
+          <div className="flex-none pt-0.5">
+            {toast.type === "info" && (
+              <span className="relative flex h-3.5 w-3.5 items-center justify-center">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-ice-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-ice-500 animate-pulse"></span>
+              </span>
+            )}
+            {toast.type === "success" && (
+              <span className="text-emerald-400 flex items-center justify-center w-4 h-4 bg-emerald-500/10 border border-emerald-500/30 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.2)]">
+                <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+              </span>
+            )}
+            {toast.type === "error" && (
+              <span className="text-red-400 flex items-center justify-center w-4 h-4 bg-red-500/10 border border-red-500/30 rounded-full shadow-[0_0_8px_rgba(239,68,68,0.2)]">
+                <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </span>
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">
+              {toast.type === "info" ? "Running query" : toast.type === "success" ? "Query Success" : "Query Error"}
+            </p>
+            <p className="text-xs text-gray-300 leading-snug line-clamp-2">{toast.message}</p>
+          </div>
+          <button
+            onClick={() => setToast(null)}
+            className="flex-none text-gray-500 hover:text-gray-300 text-[14px] leading-none ml-1 transition-colors"
+          >
+            ×
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -319,41 +450,46 @@ function ResultTable({ columns, data }: { columns: string[]; data: any[][] }) {
   if (data.length === 0) {
     return <div className="px-3 py-2 text-gray-500 italic text-xs">(no rows)</div>;
   }
+
   return (
-    <div className="overflow-auto scrollbar-thin max-h-[28rem]">
-      <table className="min-w-full table-auto border-separate border-spacing-0">
-        <thead className="sticky top-0 z-10">
-          <tr>
-            {columns.map((c) => (
-              <th
-                key={c}
-                className="text-left px-3 py-2 bg-ink-800 text-[10px] font-semibold uppercase tracking-[0.08em] text-gray-400 border-b-2 border-ice-500/40 whitespace-nowrap"
-              >
-                {c}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {data.map((row, i) => (
-            <tr key={i} className="even:bg-ink-900/30 hover:bg-ice-500/[0.06] transition-colors">
-              {row.map((v, j) => {
-                const s = v === null || v === undefined ? null : fmtCell(v);
-                const long = s !== null && s.length > 80;
-                return (
-                  <td
-                    key={j}
-                    title={long ? s! : undefined}
-                    className="px-3 py-1.5 text-gray-100 border-b border-ink-700/40 align-top font-mono text-[12px] max-w-[28rem] truncate"
-                  >
-                    {s === null ? <span className="text-gray-600 italic">NULL</span> : s}
-                  </td>
-                );
-              })}
+    <div className="flex flex-col">
+      <div className="overflow-auto scrollbar-thin max-h-[28rem]">
+        <table className="min-w-full table-auto border-separate border-spacing-0">
+          <thead className="sticky top-0 z-10">
+            <tr>
+              {columns.map((c) => (
+                <th
+                  key={c}
+                  className="text-left px-3 py-2 bg-ink-800 text-[10px] font-semibold uppercase tracking-[0.08em] text-gray-400 border-b-2 border-ice-500/40 whitespace-nowrap"
+                >
+                  {c}
+                </th>
+              ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {data.map((row, i) => (
+              <tr key={i} className="even:bg-ink-900/30 hover:bg-ice-500/[0.06] transition-colors">
+                {row.map((v, j) => {
+                  const s = v === null || v === undefined ? null : fmtCell(v);
+                  const long = s !== null && s.length > 80;
+                  return (
+                    <td
+                      key={j}
+                      title={long ? s! : undefined}
+                      className="px-3 py-1.5 text-gray-100 border-b border-ink-700/40 align-top font-mono text-[12px] max-w-[28rem] truncate"
+                    >
+                      {s === null ? (
+                        <span className="px-1.5 py-0.5 rounded bg-ink-950/80 text-[10px] text-gray-600 font-semibold border border-ink-700/40">NULL</span>
+                      ) : s}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
