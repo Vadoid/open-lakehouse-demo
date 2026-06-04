@@ -21,13 +21,28 @@ if ! docker network inspect "${NET}" >/dev/null 2>&1; then
 fi
 echo ">> using network '${NET}'"
 
-# Flattened JSON to avoid nested Here-Doc issues
-JSON_STR="[{\"AllowedOrigins\":[\"http://localhost:3030\",\"http://localhost:8181\",\"http://${EXTERNAL_IP}:3030\",\"http://${EXTERNAL_IP}:8181\"],\"AllowedMethods\":[\"GET\",\"HEAD\",\"POST\",\"PUT\",\"DELETE\"],\"AllowedHeaders\":[\"*\"],\"ExposeHeaders\":[\"ETag\",\"x-amz-version-id\"],\"MaxAgeSeconds\":3000}]"
+# Create a temporary file on the host to avoid quoting hell inside docker run
+CORS_TEMP=$(mktemp)
+cat <<EOF > "${CORS_TEMP}"
+[
+  {
+    "AllowedOrigins": [
+      "http://localhost:3030",
+      "http://localhost:8181",
+      "http://${EXTERNAL_IP}:3030",
+      "http://${EXTERNAL_IP}:8181"
+    ],
+    "AllowedMethods": ["GET", "HEAD", "POST", "PUT", "DELETE"],
+    "AllowedHeaders": ["*"],
+    "ExposeHeaders": ["ETag", "x-amz-version-id"],
+    "MaxAgeSeconds": 3000
+  }
+]
+EOF
 
-docker run --rm --network "${NET}" --entrypoint /bin/sh minio/mc -c "
+docker run --rm --network "${NET}" -v "${CORS_TEMP}:/tmp/cors.json" --entrypoint /bin/sh minio/mc -c "
   mc alias set lake http://lake-minio:9000 '${S3_ACCESS_KEY}' '${S3_SECRET_KEY}' &&
   mc mb --ignore-existing lake/${BUCKET} &&
-  echo '${JSON_STR}' > /tmp/cors.json &&
   echo '>> Applying CORS to lake/${BUCKET} (with retries)...' &&
   for i in 1 2 3 4 5; do
     if mc cors set lake/${BUCKET} /tmp/cors.json; then
@@ -38,6 +53,7 @@ docker run --rm --network "${NET}" --entrypoint /bin/sh minio/mc -c "
   done
   exit 1
 "
+rm -f "${CORS_TEMP}"
 
 echo ">> bootstrapping Lakekeeper (sets initial admin / first project)..."
 curl -sf -X POST "${LK}/management/v1/bootstrap" \
