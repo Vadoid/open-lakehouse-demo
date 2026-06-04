@@ -42,8 +42,8 @@ export default function StepRail() {
   }, [fetchCompletedSteps]);
 
   // Calculate progress percentage
-  const totalDemoSteps = STEPS.filter(s => !s.wrapup).length + 1;
-  const completedDemoSteps = STEPS.filter(s => !s.wrapup && completedSteps.includes(s.id)).length;
+  const totalDemoSteps = STEPS.length;
+  const completedDemoSteps = STEPS.filter(s => completedSteps.includes(s.id)).length;
   const percent = totalDemoSteps > 0 ? (completedDemoSteps / totalDemoSteps) * 100 : 0;
 
   return (
@@ -56,7 +56,7 @@ export default function StepRail() {
         </div>
         <div className="w-full h-1.5 bg-ink-800 rounded-full overflow-hidden border border-ink-700/50">
           <div
-            className="h-full bg-gradient-to-r from-ice-600 to-ice-400 transition-all duration-700 ease-out shadow-[0_0_8px_rgba(59,130,246,0.5)]"
+            className="h-full bg-gradient-to-r from-ice-500 to-ice-300 transition-all duration-700 ease-out shadow-[0_0_8px_rgba(59,130,246,0.5)]"
             style={{ width: `${percent}%` }}
           />
         </div>
