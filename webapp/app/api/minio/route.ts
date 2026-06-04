@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { listAll } from "@/lib/s3";
-import { cache, diffSnapshots } from "@/lib/cache";
+import { cache, diffSnapshots, FileSnapshot } from "@/lib/cache";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +13,14 @@ export async function GET(req: NextRequest) {
   const prefix = req.nextUrl.searchParams.get("prefix") ?? "demo/";
   const diffStep = req.nextUrl.searchParams.get("diffStep");
 
-  const snap = await listAll(prefix);
+  const storageConfig = cache.storageConfig;
+  let snap: FileSnapshot;
+  if (storageConfig && storageConfig.type === "gcs") {
+    const { listAllGcs } = await import("@/lib/gcs");
+    snap = await listAllGcs(storageConfig.bucket, prefix, storageConfig.gcsKey);
+  } else {
+    snap = await listAll(prefix);
+  }
 
   let diff: Record<string, string> | undefined;
   let baseline: "pre-step" | "previous-listing" | undefined;

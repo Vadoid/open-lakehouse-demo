@@ -1,8 +1,7 @@
 import "./globals.css";
 import type { Metadata } from "next";
+import HeaderActions from "@/components/HeaderActions";
 import StepRail from "@/components/StepRail";
-import HealthPills from "@/components/HealthPills";
-import ThemeToggle from "@/components/ThemeToggle";
 
 export const metadata: Metadata = {
   title: "Open Lakehouse with Iceberg V3",
@@ -46,10 +45,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 Open Lakehouse with Iceberg V3
               </span>
             </a>
-            <div className="flex items-center gap-3">
-              <HealthPills />
-              <ThemeToggle />
-            </div>
+            <HeaderActions />
           </div>
         </header>
         <div className="flex-1 flex">
