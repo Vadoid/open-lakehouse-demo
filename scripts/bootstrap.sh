@@ -11,7 +11,7 @@ for i in $(seq 1 60); do
   sleep 2
 done
 
-echo ">> creating MinIO bucket '${BUCKET}' and setting CORS..."
+echo ">> creating MinIO bucket '${BUCKET}'..."
 # Resolve the network lake-minio is actually attached to
 NET=$(docker inspect -f '{{range $k,$v := .NetworkSettings.Networks}}{{$k}}{{end}}' lake-minio 2>/dev/null || true)
 NET=${NET:-${NETWORK}}
@@ -21,33 +21,9 @@ if ! docker network inspect "${NET}" >/dev/null 2>&1; then
 fi
 echo ">> using network '${NET}'"
 
-# VER 7: Refined XML. Removed x-amz-version-id from ExposeHeader as it often 
-# triggers 'Not Implemented' if versioning isn't explicitly configured.
-CORS_XML="<CORSConfiguration><CORSRule><AllowedOrigin>http://localhost:3030</AllowedOrigin><AllowedOrigin>http://localhost:8181</AllowedOrigin><AllowedOrigin>http://${EXTERNAL_IP}:3030</AllowedOrigin><AllowedOrigin>http://${EXTERNAL_IP}:8181</AllowedOrigin><AllowedMethod>GET</AllowedMethod><AllowedMethod>HEAD</AllowedMethod><AllowedMethod>POST</AllowedMethod><AllowedMethod>PUT</AllowedMethod><AllowedMethod>DELETE</AllowedMethod><AllowedHeader>*</AllowedHeader><ExposeHeader>ETag</ExposeHeader><MaxAgeSeconds>3000</MaxAgeSeconds></CORSRule></CORSConfiguration>"
-
 docker run --rm --network "${NET}" --entrypoint /bin/sh minio/mc -c "
-  set -e
-  echo '>> [VER: 7] Configuring mc alias...'
-  mc alias set lake http://lake-minio:9000 '${S3_ACCESS_KEY}' '${S3_SECRET_KEY}'
-  
-  echo '>> [VER: 7] Creating bucket lake/${BUCKET}...'
+  mc alias set lake http://lake-minio:9000 '${S3_ACCESS_KEY}' '${S3_SECRET_KEY}' &&
   mc mb --ignore-existing lake/${BUCKET}
-  
-  echo '${CORS_XML}' > /tmp/cors.xml
-  
-  echo '>> [VER: 7] Applying CORS policy (with retries)...'
-  sleep 5
-  for i in 1 2 3 4 5; do
-    echo \"   Attempt \$i to set CORS...\"
-    if mc cors set lake/${BUCKET} /tmp/cors.xml; then
-      echo '>> [VER: 7] CORS applied successfully.'
-      exit 0
-    fi
-    echo \"   CORS set failed, retrying in 5s...\"
-    sleep 5
-  done
-  echo '!! [VER: 7] Failed to set CORS after 5 attempts.'
-  exit 1
 "
 
 echo ">> bootstrapping Lakekeeper (sets initial admin / first project)..."

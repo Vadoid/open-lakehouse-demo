@@ -133,7 +133,6 @@ resource "null_resource" "bootstrap" {
       S3_SECRET_KEY = var.s3_secret_key
       WAREHOUSE     = var.warehouse
       BUCKET        = var.bucket
-      EXTERNAL_IP   = local.external_ip
     }
   }
 }
