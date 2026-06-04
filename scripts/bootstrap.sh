@@ -44,10 +44,11 @@ CORS_JSON=$(cat <<EOF
 EOF
 )
 
-docker run --rm --network "${NET}" --entrypoint /bin/sh minio/mc -c "
+# Pipe CORS_JSON into the container to avoid shell escaping/multiline issues with 'echo' inside docker run
+echo "${CORS_JSON}" | docker run --rm -i --network "${NET}" --entrypoint /bin/sh minio/mc -c "
   mc alias set lake http://lake-minio:9000 '${S3_ACCESS_KEY}' '${S3_SECRET_KEY}' &&
   mc mb --ignore-existing lake/${BUCKET} &&
-  echo '${CORS_JSON}' > /tmp/cors.json &&
+  cat > /tmp/cors.json &&
   mc cors set lake/${BUCKET} /tmp/cors.json
 "
 
