@@ -21,39 +21,54 @@ if ! docker network inspect "${NET}" >/dev/null 2>&1; then
 fi
 echo ">> using network '${NET}'"
 
-# Create a temporary file on the host to avoid quoting hell inside docker run
-CORS_TEMP=$(mktemp)
-cat <<EOF > "${CORS_TEMP}"
-[
-  {
-    "AllowedOrigins": [
-      "http://localhost:3030",
-      "http://localhost:8181",
-      "http://${EXTERNAL_IP}:3030",
-      "http://${EXTERNAL_IP}:8181"
-    ],
-    "AllowedMethods": ["GET", "HEAD", "POST", "PUT", "DELETE"],
-    "AllowedHeaders": ["*"],
-    "ExposeHeaders": ["ETag", "x-amz-version-id"],
-    "MaxAgeSeconds": 3000
-  }
-]
+# Use the WRAPPED JSON format (CORSRules) which is required by newer mc versions.
+# A top-level array often causes the 'decoding xml: EOF' error.
+CORS_JSON=$(cat <<EOF
+{
+  "CORSRules": [
+    {
+      "AllowedOrigins": [
+        "http://localhost:3030",
+        "http://localhost:8181",
+        "http://${EXTERNAL_IP}:3030",
+        "http://${EXTERNAL_IP}:8181"
+      ],
+      "AllowedMethods": ["GET", "HEAD", "POST", "PUT", "DELETE"],
+      "AllowedHeaders": ["*"],
+      "ExposeHeaders": ["ETag", "x-amz-version-id"],
+      "MaxAgeSeconds": 3000
+    }
+  ]
+}
 EOF
+)
 
-docker run --rm --network "${NET}" -v "${CORS_TEMP}:/tmp/cors.json" --entrypoint /bin/sh minio/mc -c "
-  mc alias set lake http://lake-minio:9000 '${S3_ACCESS_KEY}' '${S3_SECRET_KEY}' &&
-  mc mb --ignore-existing lake/${BUCKET} &&
-  echo '>> Applying CORS to lake/${BUCKET} (with retries)...' &&
+# Run a single, robust bootstrap script inside the mc container
+echo "${CORS_JSON}" | docker run --rm -i --network "${NET}" --entrypoint /bin/sh minio/mc -c "
+  set -e
+  echo '>> Configuring mc alias...'
+  mc alias set lake http://lake-minio:9000 '${S3_ACCESS_KEY}' '${S3_SECRET_KEY}'
+  
+  echo '>> Creating bucket...'
+  mc mb --ignore-existing lake/${BUCKET}
+  
+  # Read CORS from stdin
+  cat > /tmp/cors.json
+  
+  echo '>> Applying CORS policy (with retries and debug logging)...'
+  # Sometimes MinIO needs a moment after mb to accept CORS
+  sleep 5
   for i in 1 2 3 4 5; do
-    if mc cors set lake/${BUCKET} /tmp/cors.json; then
+    if mc --debug cors set lake/${BUCKET} /tmp/cors.json; then
+      echo '>> CORS applied successfully.'
       exit 0
     fi
-    echo \"   CORS set failed, retrying in 2s...\"
-    sleep 2
+    echo \"   CORS set failed (attempt \$i), retrying in 3s...\"
+    sleep 3
   done
+  echo '!! Failed to set CORS after 5 attempts.'
   exit 1
 "
-rm -f "${CORS_TEMP}"
 
 echo ">> bootstrapping Lakekeeper (sets initial admin / first project)..."
 curl -sf -X POST "${LK}/management/v1/bootstrap" \
