@@ -3,6 +3,7 @@ import { STEPS } from "@/lib/steps";
 import ArchDiagram from "@/components/ArchDiagram";
 import ResetButton from "@/components/ResetButton";
 import CredsRow from "@/components/CredsRow";
+import DynamicLink from "@/components/DynamicLink";
 
 export default function Home() {
   return (
@@ -234,22 +235,23 @@ export default function Home() {
         >
           Skip to wrap-up
         </Link>
-        <a
-          href="http://localhost:8181/ui/"
+        <DynamicLink
+          port={8181}
+          path="/ui/"
           target="_blank"
           rel="noopener noreferrer"
           className="px-3 py-2 rounded border border-ink-700 text-sm text-gray-700 dark:text-gray-300 hover:border-ice-500 hover:text-ice-500 transition"
         >
           Lakekeeper UI ↗
-        </a>
-        <a
-          href="http://localhost:9001"
+        </DynamicLink>
+        <DynamicLink
+          port={9001}
           target="_blank"
           rel="noopener noreferrer"
           className="px-3 py-2 rounded border border-ink-700 text-sm text-gray-700 dark:text-gray-300 hover:border-ice-500 hover:text-ice-500 transition"
         >
           MinIO console ↗
-        </a>
+        </DynamicLink>
         <span className="text-[11px] text-gray-500 flex items-center gap-1">
           <span className="text-gray-600">MinIO login:</span>
           <CredsRow />

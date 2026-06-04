@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import CredsRow from "@/components/CredsRow";
+import DynamicLink from "@/components/DynamicLink";
 
 type Wrap = {
   tables: { ns: string; table: string; snapshots: number; formatVersion?: number; columns: number }[];
@@ -301,10 +302,22 @@ export default function WrapUp() {
           <div>
             <div className="text-gray-400 font-semibold mb-1">Local endpoints</div>
             <ul className="space-y-0.5 font-mono">
-              <li><a className="hover:text-ice-300" href="http://localhost:8181/ui/" target="_blank" rel="noreferrer">localhost:8181/ui</a> · Lakekeeper</li>
-              <li><a className="hover:text-ice-300" href="http://localhost:9001"     target="_blank" rel="noreferrer">localhost:9001</a> · MinIO <span className="ml-1 inline-block"><CredsRow /></span></li>
-              <li><a className="hover:text-ice-300" href="http://localhost:4040"     target="_blank" rel="noreferrer">localhost:4040</a> · Spark UI</li>
-              <li>localhost:10000 · Thrift JDBC</li>
+              <li>
+                <DynamicLink port={8181} path="/ui/" className="hover:text-ice-300" target="_blank" rel="noreferrer">
+                  <DynamicText port={8181} path="/ui" />
+                </DynamicLink> · Lakekeeper
+              </li>
+              <li>
+                <DynamicLink port={9001} className="hover:text-ice-300" target="_blank" rel="noreferrer">
+                  <DynamicText port={9001} />
+                </DynamicLink> · MinIO <span className="ml-1 inline-block"><CredsRow /></span>
+              </li>
+              <li>
+                <DynamicLink port={4040} className="hover:text-ice-300" target="_blank" rel="noreferrer">
+                  <DynamicText port={4040} />
+                </DynamicLink> · Spark UI
+              </li>
+              <li><DynamicText port={10000} /> · Thrift JDBC</li>
             </ul>
           </div>
           <div>
@@ -363,4 +376,12 @@ function Block({ title, children }: { title: string; children: React.ReactNode }
       <div className="text-gray-300">{children}</div>
     </div>
   );
+}
+
+function DynamicText({ port, path = "" }: { port: number, path?: string }) {
+  const [host, setHost] = useState("localhost");
+  useEffect(() => {
+    if (typeof window !== "undefined") setHost(window.location.hostname);
+  }, []);
+  return <>{host}:{port}{path}</>;
 }
