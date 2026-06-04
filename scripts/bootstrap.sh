@@ -12,46 +12,32 @@ for i in $(seq 1 60); do
 done
 
 echo ">> creating MinIO bucket '${BUCKET}' and setting CORS..."
-# Resolve the network lake-minio is actually attached to instead of trusting
-# ${NETWORK}. This survives daemon/context mismatches and stale names: if the
-# CLI here can inspect lake-minio, the network we read back is guaranteed to
-# exist on the same daemon, so `docker run --network <net>` cannot 404.
+# Resolve the network lake-minio is actually attached to
 NET=$(docker inspect -f '{{range $k,$v := .NetworkSettings.Networks}}{{$k}}{{end}}' lake-minio 2>/dev/null || true)
 NET=${NET:-${NETWORK}}
 if ! docker network inspect "${NET}" >/dev/null 2>&1; then
   echo "!! docker network '${NET}' not found by this CLI."
-  echo "   Terraform's docker provider and this script are talking to different"
-  echo "   daemons/contexts. Check: docker context ls ; echo \$DOCKER_HOST"
   exit 1
 fi
 echo ">> using network '${NET}'"
 
-# Use a robust Here-Doc strategy to write the script and JSON inside the container
-docker run --rm -i --network "${NET}" --entrypoint /bin/sh minio/mc <<COMMANDS
-  mc alias set lake http://lake-minio:9000 '${S3_ACCESS_KEY}' '${S3_SECRET_KEY}'
-  mc mb --ignore-existing lake/${BUCKET}
-  
-  # Write CORS JSON
-  cat <<EOF > /tmp/cors.json
-[
-  {
-    "AllowedOrigins": [
-      "http://localhost:3030",
-      "http://localhost:8181",
-      "http://${EXTERNAL_IP}:3030",
-      "http://${EXTERNAL_IP}:8181"
-    ],
-    "AllowedMethods": ["GET", "HEAD", "POST", "PUT", "DELETE"],
-    "AllowedHeaders": ["*"],
-    "ExposeHeaders": ["ETag", "x-amz-version-id"],
-    "MaxAgeSeconds": 3000
-  }
-]
-EOF
+# Flattened JSON to avoid nested Here-Doc issues
+JSON_STR="[{\"AllowedOrigins\":[\"http://localhost:3030\",\"http://localhost:8181\",\"http://${EXTERNAL_IP}:3030\",\"http://${EXTERNAL_IP}:8181\"],\"AllowedMethods\":[\"GET\",\"HEAD\",\"POST\",\"PUT\",\"DELETE\"],\"AllowedHeaders\":[\"*\"],\"ExposeHeaders\":[\"ETag\",\"x-amz-version-id\"],\"MaxAgeSeconds\":3000}]"
 
-  echo ">> Applying CORS to lake/${BUCKET}..."
-  mc cors set lake/${BUCKET} /tmp/cors.json
-COMMANDS
+docker run --rm --network "${NET}" --entrypoint /bin/sh minio/mc -c "
+  mc alias set lake http://lake-minio:9000 '${S3_ACCESS_KEY}' '${S3_SECRET_KEY}' &&
+  mc mb --ignore-existing lake/${BUCKET} &&
+  echo '${JSON_STR}' > /tmp/cors.json &&
+  echo '>> Applying CORS to lake/${BUCKET} (with retries)...' &&
+  for i in 1 2 3 4 5; do
+    if mc cors set lake/${BUCKET} /tmp/cors.json; then
+      exit 0
+    fi
+    echo \"   CORS set failed, retrying in 2s...\"
+    sleep 2
+  done
+  exit 1
+"
 
 echo ">> bootstrapping Lakekeeper (sets initial admin / first project)..."
 curl -sf -X POST "${LK}/management/v1/bootstrap" \
