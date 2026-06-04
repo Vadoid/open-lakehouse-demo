@@ -26,7 +26,13 @@ if ! docker network inspect "${NET}" >/dev/null 2>&1; then
 fi
 echo ">> using network '${NET}'"
 
-CORS_JSON=$(cat <<EOF
+# Use a robust Here-Doc strategy to write the script and JSON inside the container
+docker run --rm -i --network "${NET}" --entrypoint /bin/sh minio/mc <<COMMANDS
+  mc alias set lake http://lake-minio:9000 '${S3_ACCESS_KEY}' '${S3_SECRET_KEY}'
+  mc mb --ignore-existing lake/${BUCKET}
+  
+  # Write CORS JSON
+  cat <<EOF > /tmp/cors.json
 [
   {
     "AllowedOrigins": [
@@ -42,15 +48,10 @@ CORS_JSON=$(cat <<EOF
   }
 ]
 EOF
-)
 
-# Pipe CORS_JSON into the container to avoid shell escaping/multiline issues with 'echo' inside docker run
-echo "${CORS_JSON}" | docker run --rm -i --network "${NET}" --entrypoint /bin/sh minio/mc -c "
-  mc alias set lake http://lake-minio:9000 '${S3_ACCESS_KEY}' '${S3_SECRET_KEY}' &&
-  mc mb --ignore-existing lake/${BUCKET} &&
-  cat > /tmp/cors.json &&
+  echo ">> Applying CORS to lake/${BUCKET}..."
   mc cors set lake/${BUCKET} /tmp/cors.json
-"
+COMMANDS
 
 echo ">> bootstrapping Lakekeeper (sets initial admin / first project)..."
 curl -sf -X POST "${LK}/management/v1/bootstrap" \
