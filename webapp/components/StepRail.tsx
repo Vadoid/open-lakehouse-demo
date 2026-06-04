@@ -42,7 +42,7 @@ export default function StepRail() {
   }, [fetchCompletedSteps]);
 
   // Calculate progress percentage
-  const totalDemoSteps = STEPS.filter(s => !s.wrapup).length;
+  const totalDemoSteps = STEPS.filter(s => !s.wrapup).length + 1;
   const completedDemoSteps = STEPS.filter(s => !s.wrapup && completedSteps.includes(s.id)).length;
   const percent = totalDemoSteps > 0 ? (completedDemoSteps / totalDemoSteps) * 100 : 0;
 
