@@ -141,12 +141,28 @@ export default function SqlPanel({ step }: { step: Step }) {
   async function run() {
     if (running) return;
     setRunning(true); setResults([]); setStmtSql({}); setDoneMs(null); setErr(null); setDiff(null);
-    setToast({ message: "Running SQL statements...", type: "info" });
+    
+    const ta = taRef.current;
+    let sqlToRun = sql;
+    let isSelection = false;
+    if (ta) {
+      const start = ta.selectionStart;
+      const end = ta.selectionEnd;
+      if (start !== end) {
+        sqlToRun = sql.substring(start, end);
+        isSelection = true;
+      }
+    }
+
+    setToast({ 
+      message: isSelection ? "Running selected SQL statements..." : "Running SQL statements...", 
+      type: "info" 
+    });
     const ctrl = new AbortController();
     abortRef.current = ctrl;
     try {
       const currentCfg = cfg ?? loadConfig();
-      const runSql = applyConfigForSql(sql, currentCfg);
+      const runSql = applyConfigForSql(sqlToRun, currentCfg);
       const resp = await fetch("/api/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
