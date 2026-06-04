@@ -1,9 +1,12 @@
+"use client";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { STEPS } from "@/lib/steps";
 import ArchDiagram from "@/components/ArchDiagram";
 import ResetButton from "@/components/ResetButton";
 import CredsRow from "@/components/CredsRow";
 import DynamicLink from "@/components/DynamicLink";
+import { loadConfig, applyConfig, DEFAULT_CONFIG, DemoConfig } from "@/lib/demoConfig";
 
 const PHASES = [
   {
@@ -33,6 +36,11 @@ const PHASES = [
 ];
 
 export default function Home() {
+  const [cfg, setCfg] = useState<DemoConfig>(DEFAULT_CONFIG);
+
+  useEffect(() => {
+    setCfg(loadConfig());
+  }, []);
   return (
     <div className="p-8 max-w-5xl mx-auto space-y-12">
       {/* Hero Header Section */}
@@ -123,10 +131,10 @@ export default function Home() {
                         </span>
                         <div className="min-w-0">
                           <h4 className="text-xs font-semibold text-gray-200 group-hover:text-ice-100 transition-colors leading-tight mb-1 truncate">
-                            {step.title}
+                            {applyConfig(step.title, cfg)}
                           </h4>
                           <p className="text-[11px] text-gray-400 leading-snug line-clamp-2">
-                            {sId === 18 ? "Live counters, matrix check, production review checklist" : step.why.replace(/##.*/g, "").trim().slice(0, 100)}...
+                            {sId === 18 ? "Live counters, matrix check, production review checklist" : applyConfig(step.why, cfg).replace(/##.*/g, "").trim().slice(0, 100)}...
                           </p>
                         </div>
                       </Link>
