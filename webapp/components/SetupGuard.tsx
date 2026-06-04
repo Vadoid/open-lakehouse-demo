@@ -31,7 +31,7 @@ export default function SetupGuard({ children }: { children: React.ReactNode }) 
         <div className="w-full max-w-2xl bg-ink-900/60 border border-ink-700/80 rounded-2xl shadow-2xl p-8 backdrop-blur-md relative z-10 space-y-6">
           <header className="text-center space-y-2">
             <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-ice-500/10 border border-ice-500/20 text-ice-300 text-2xl mb-2 animate-bounce">
-              ❄️
+              🧊
             </div>
             <h1 className="text-xl font-bold tracking-tight text-ice-100 uppercase">
               Welcome to the Open Lakehouse Demo
