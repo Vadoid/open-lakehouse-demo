@@ -28,7 +28,11 @@ export default function StorageSetupForm({ onSuccess, onCancel, showCancel = tru
     fetch("/api/storage-setup")
       .then((r) => r.json())
       .then((j) => {
-        setCfg({ type: j.type, bucket: j.bucket, hasKey: j.hasKey });
+        setCfg({
+          type: j.type,
+          bucket: j.type === "gcs" ? j.bucket : (j.defaultGcsBucket || ""),
+          hasKey: j.hasKey
+        });
         setDefaultBucket(j.defaultGcsBucket || "");
       })
       .catch(() => {});
@@ -46,7 +50,7 @@ export default function StorageSetupForm({ onSuccess, onCancel, showCancel = tru
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           type: cfg.type,
-          bucket: cfg.bucket,
+          bucket: cfg.type === "minio" ? "warehouse" : cfg.bucket,
           gcsKey: cfg.type === "gcs" && gcsKeyInput ? gcsKeyInput : undefined,
         }),
       });
@@ -133,7 +137,7 @@ gcloud iam service-accounts keys create /dev/stdout --iam-account="lakehouse-cat
                 type="radio"
                 name="type"
                 checked={cfg.type === "minio"}
-                onChange={() => setCfg((c) => ({ ...c, type: "minio" }))}
+                onChange={() => setCfg((c) => ({ ...c, type: "minio", bucket: "warehouse" }))}
                 className="accent-ice-500"
               />
               Local Sandbox (MinIO)
@@ -150,7 +154,7 @@ gcloud iam service-accounts keys create /dev/stdout --iam-account="lakehouse-cat
                 type="radio"
                 name="type"
                 checked={cfg.type === "gcs"}
-                onChange={() => setCfg((c) => ({ ...c, type: "gcs" }))}
+                onChange={() => setCfg((c) => ({ ...c, type: "gcs", bucket: c.bucket === "warehouse" ? defaultBucket : c.bucket }))}
                 className="accent-ice-500"
               />
               Google Cloud Storage
@@ -160,22 +164,22 @@ gcloud iam service-accounts keys create /dev/stdout --iam-account="lakehouse-cat
         </div>
       </div>
 
-      <div className="space-y-1">
-        <label className="text-[11px] font-bold uppercase tracking-wider text-gray-500 block">
-          Bucket Name
-        </label>
-        <input
-          type="text"
-          required
-          value={cfg.bucket}
-          onChange={(e) => setCfg((c) => ({ ...c, bucket: e.target.value }))}
-          placeholder={cfg.type === "gcs" ? defaultBucket : "warehouse"}
-          className="w-full px-3 py-2 bg-ink-950 text-xs rounded border border-ink-700/60 focus:border-ice-500/40 outline-none text-gray-200"
-        />
-      </div>
-
       {cfg.type === "gcs" && (
-        <div className="space-y-3">
+        <div className="space-y-3 animate-in fade-in duration-200">
+          <div className="space-y-1">
+            <label className="text-[11px] font-bold uppercase tracking-wider text-gray-500 block">
+              Bucket Name
+            </label>
+            <input
+              type="text"
+              required
+              value={cfg.bucket}
+              onChange={(e) => setCfg((c) => ({ ...c, bucket: e.target.value }))}
+              placeholder={defaultBucket}
+              className="w-full px-3 py-2 bg-ink-950 text-xs rounded border border-ink-700/60 focus:border-ice-500/40 outline-none text-gray-200 font-semibold"
+            />
+          </div>
+
           {/* GCP Onboarding Helper script box */}
           <div className="bg-ink-950/50 border border-ink-700/60 p-4 rounded-xl space-y-3">
             <div className="text-xs font-semibold text-ice-200 flex items-center gap-1.5">
