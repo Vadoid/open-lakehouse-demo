@@ -20,12 +20,16 @@ export default function StorageSetupForm({ onSuccess, onCancel, showCancel = tru
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [defaultBucket, setDefaultBucket] = useState("");
+  const [projectId, setProjectId] = useState("");
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     fetch("/api/storage-setup")
       .then((r) => r.json())
       .then((j) => {
         setCfg({ type: j.type, bucket: j.bucket, hasKey: j.hasKey });
+        setDefaultBucket(j.defaultGcsBucket || "");
       })
       .catch(() => {});
   }, []);
@@ -60,6 +64,14 @@ export default function StorageSetupForm({ onSuccess, onCancel, showCancel = tru
       setLoading(false);
     }
   }
+
+  const proj = projectId || "[PROJECT_ID]";
+  const bkt = cfg.bucket || defaultBucket || "open-lakehouse-bucket";
+  const gcloudScript = `gcloud config set project ${proj} && \\
+gcloud storage buckets create gs://${bkt} --location=us-central1 && \\
+gcloud iam service-accounts create lakehouse-catalog --display-name="lakehouse-catalog" && \\
+gcloud projects add-iam-policy-binding ${proj} --member="serviceAccount:lakehouse-catalog@${proj}.iam.gserviceaccount.com" --role="roles/storage.admin" && \\
+gcloud iam service-accounts keys create /dev/stdout --iam-account="lakehouse-catalog@${proj}.iam.gserviceaccount.com"`;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -114,27 +126,78 @@ export default function StorageSetupForm({ onSuccess, onCancel, showCancel = tru
           required
           value={cfg.bucket}
           onChange={(e) => setCfg((c) => ({ ...c, bucket: e.target.value }))}
-          placeholder={cfg.type === "gcs" ? "my-gcs-bucket-name" : "warehouse"}
+          placeholder={cfg.type === "gcs" ? defaultBucket : "warehouse"}
           className="w-full px-3 py-2 bg-ink-950 text-xs rounded border border-ink-700/60 focus:border-ice-500/40 outline-none text-gray-200"
         />
       </div>
 
       {cfg.type === "gcs" && (
-        <div className="space-y-1">
-          <label className="text-[11px] font-bold uppercase tracking-wider text-gray-500 block">
-            GCS Service Account JSON Key {cfg.hasKey && <span className="text-[10px] text-emerald-500 font-semibold">(Already configured)</span>}
-          </label>
-          <textarea
-            required={!cfg.hasKey}
-            value={gcsKeyInput}
-            onChange={(e) => setGcsKeyInput(e.target.value)}
-            placeholder='{"type": "service_account", "project_id": ...}'
-            rows={5}
-            className="w-full px-3 py-1.5 bg-ink-950 text-[11px] font-mono rounded border border-ink-700/60 focus:border-ice-500/40 outline-none text-gray-200"
-          />
-          <span className="text-[9px] text-gray-500 block">
-            Paste JSON key. If key is already configured, leave empty to keep it unchanged.
-          </span>
+        <div className="space-y-3">
+          {/* GCP Onboarding Helper script box */}
+          <div className="bg-ink-950/50 border border-ink-700/60 p-4 rounded-xl space-y-3">
+            <div className="text-xs font-semibold text-ice-200 flex items-center gap-1.5">
+              <span>🚀</span> GCP Onboarding Helper Script
+            </div>
+            <p className="text-[10px] text-gray-500 leading-normal">
+              Need to set up the bucket and service account? Enter your Google Cloud Project ID below to generate a pre-configured script. Paste this into Cloud Shell to bootstrap instantly.
+            </p>
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500 block">GCP Project ID</label>
+              <input
+                type="text"
+                value={projectId}
+                onChange={(e) => setProjectId(e.target.value)}
+                placeholder="my-gcp-project"
+                className="w-full px-3 py-1.5 bg-ink-950 text-xs rounded border border-ink-700/60 focus:border-ice-500/40 outline-none text-gray-200"
+              />
+            </div>
+            <div className="relative">
+              <pre className="p-2.5 bg-ink-950 text-[10px] font-mono rounded overflow-x-auto text-gray-300 border border-ink-800 max-h-32 scrollbar-thin select-all leading-normal whitespace-pre-wrap">
+                {gcloudScript}
+              </pre>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(gcloudScript);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                }}
+                className="absolute right-2 top-2 px-2 py-1 bg-ink-800 hover:bg-ink-700 text-[10px] text-gray-300 rounded border border-ink-700 transition"
+              >
+                {copied ? "Copied! ✓" : "Copy"}
+              </button>
+            </div>
+            <div className="flex justify-between items-center text-[10px]">
+              <span className="text-gray-500">
+                Run this inside your Cloud Shell window.
+              </span>
+              <a
+                href="https://shell.cloud.google.com/?show=terminal"
+                target="_blank"
+                rel="noreferrer"
+                className="text-ice-400 hover:text-ice-300 font-semibold underline flex items-center gap-1"
+              >
+                Open Cloud Shell ↗
+              </a>
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[11px] font-bold uppercase tracking-wider text-gray-500 block">
+              GCS Service Account JSON Key {cfg.hasKey && <span className="text-[10px] text-emerald-500 font-semibold">(Already configured)</span>}
+            </label>
+            <textarea
+              required={!cfg.hasKey}
+              value={gcsKeyInput}
+              onChange={(e) => setGcsKeyInput(e.target.value)}
+              placeholder='{"type": "service_account", "project_id": ...}'
+              rows={5}
+              className="w-full px-3 py-1.5 bg-ink-950 text-[11px] font-mono rounded border border-ink-700/60 focus:border-ice-500/40 outline-none text-gray-200"
+            />
+            <span className="text-[9px] text-gray-500 block">
+              Paste JSON key. If key is already configured, leave empty to keep it unchanged.
+            </span>
+          </div>
         </div>
       )}
 

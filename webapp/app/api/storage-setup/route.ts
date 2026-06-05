@@ -1,17 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cache } from "@/lib/cache";
+import os from "os";
+import crypto from "crypto";
 
 const LK_URL = process.env.LAKEKEEPER_URL ?? "http://lakekeeper:8181";
 const WAREHOUSE = process.env.LAKEKEEPER_WAREHOUSE ?? "demo";
 
 export const dynamic = "force-dynamic";
 
+function getDeterministicBucketName() {
+  const hash = crypto.createHash("md5")
+    .update(os.hostname() + (os.userInfo().username || "user"))
+    .digest("hex")
+    .slice(0, 8);
+  return `open-lakehouse-${hash}`;
+}
+
 export async function GET() {
   const cfg = cache.storageConfig ?? { type: "minio", bucket: "warehouse" };
+  const defaultGcsBucket = getDeterministicBucketName();
   return NextResponse.json({
     type: cfg.type,
-    bucket: cfg.bucket,
+    bucket: cfg.bucket || defaultGcsBucket,
     hasKey: !!cfg.gcsKey,
+    defaultGcsBucket,
   });
 }
 
