@@ -21,6 +21,7 @@ export type StorageConfig = {
   type: "minio" | "gcs";
   bucket: string;
   gcsKey?: string;
+  isCustomBucket?: boolean;
 };
 
 type CacheShape = {

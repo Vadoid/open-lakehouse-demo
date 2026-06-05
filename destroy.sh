@@ -14,6 +14,24 @@ CONTAINERS=(lake-postgres lake-minio lakekeeper lake-migrate spark-thrift demo-w
 NETWORK=lakedemo
 
 # ---------------------------------------------------------------------------
+# 0. Query running webapp storage configurations for GCS bucket cleanup
+# ---------------------------------------------------------------------------
+GCS_BUCKET=""
+IS_CUSTOM_BUCKET=""
+
+if docker inspect demo-webapp >/dev/null 2>&1; then
+  echo ">> querying active storage configuration from webapp..."
+  storage_json=$(curl -s --connect-timeout 2 http://localhost:3030/api/storage-setup || true)
+  if [ -n "$storage_json" ]; then
+    storage_type=$(echo "$storage_json" | grep -o '"type":"[^"]*"' | head -n1 | cut -d'"' -f4 || true)
+    if [ "$storage_type" = "gcs" ]; then
+      GCS_BUCKET=$(echo "$storage_json" | grep -o '"bucket":"[^"]*"' | head -n1 | cut -d'"' -f4 || true)
+      IS_CUSTOM_BUCKET=$(echo "$storage_json" | grep -o '"isCustomBucket":[^,}]*' | head -n1 | tr -d ' ' | cut -d':' -f2 || true)
+    fi
+  fi
+fi
+
+# ---------------------------------------------------------------------------
 # Align with the CLI's active context, same as deploy.sh. The Terraform docker
 # provider honors DOCKER_HOST but ignores `docker context`; exporting the
 # context endpoint makes `terraform destroy` and the docker CLI hit one daemon.
@@ -74,6 +92,18 @@ for sock in /var/run/docker.sock "${XDG_RUNTIME_DIR:-}/docker.sock" "${HOME}/.do
   [ "unix://$sock" = "${DOCKER_HOST:-}" ] && continue
   sweep -H "unix://$sock"
 done
+
+# ---------------------------------------------------------------------------
+# 3. Clean up sandbox GCS bucket if configured and not custom
+# ---------------------------------------------------------------------------
+if [ -n "${GCS_BUCKET}" ]; then
+  if [ "${IS_CUSTOM_BUCKET}" = "false" ]; then
+    echo ">> removing sandbox GCS bucket: gs://${GCS_BUCKET}"
+    gcloud storage buckets delete "gs://${GCS_BUCKET}" --recursive --quiet || echo "!! failed to delete GCS bucket gs://${GCS_BUCKET}; please clean it up manually"
+  else
+    echo ">> skipping GCS bucket gs://${GCS_BUCKET} deletion (custom bucket protection active)"
+  fi
+fi
 
 echo
 echo "Teardown complete. Verify with: docker ps -a | grep -E 'lake|spark|webapp'"

@@ -24,6 +24,7 @@ export default function StorageSetupForm({ onSuccess, onCancel, showCancel = tru
   const [projectId, setProjectId] = useState("");
   const [copied, setCopied] = useState(false);
   const [bypassOrgPolicy, setBypassOrgPolicy] = useState(false);
+  const [isUnlocked, setIsUnlocked] = useState(false);
 
   useEffect(() => {
     fetch("/api/storage-setup")
@@ -35,6 +36,7 @@ export default function StorageSetupForm({ onSuccess, onCancel, showCancel = tru
           hasKey: j.hasKey
         });
         setDefaultBucket(j.defaultGcsBucket || "");
+        setIsUnlocked(!!j.isCustomBucket);
       })
       .catch(() => {});
   }, []);
@@ -53,6 +55,7 @@ export default function StorageSetupForm({ onSuccess, onCancel, showCancel = tru
           type: cfg.type,
           bucket: cfg.type === "minio" ? "warehouse" : cfg.bucket,
           gcsKey: cfg.type === "gcs" && gcsKeyInput ? gcsKeyInput : undefined,
+          isCustomBucket: cfg.type === "gcs" ? (cfg.bucket !== defaultBucket) : false,
         }),
       });
       const data = await res.json();
@@ -76,13 +79,13 @@ export default function StorageSetupForm({ onSuccess, onCancel, showCancel = tru
   const gcloudScript = bypassOrgPolicy
     ? `gcloud config set project ${proj} && \\
 gcloud resource-manager org-policies disable-enforce constraints/iam.disableServiceAccountKeyCreation --project=${proj} && \\
-gcloud storage buckets create gs://${bkt} --location=us-central1 && \\
+(gcloud storage buckets describe gs://${bkt} >/dev/null 2>&1 || gcloud storage buckets create gs://${bkt} --location=us-central1) && \\
 gcloud iam service-accounts create lakehouse-catalog --display-name="lakehouse-catalog" && \\
 gcloud projects add-iam-policy-binding ${proj} --member="serviceAccount:lakehouse-catalog@${proj}.iam.gserviceaccount.com" --role="roles/storage.admin" && \\
 gcloud iam service-accounts keys create /dev/stdout --iam-account="lakehouse-catalog@${proj}.iam.gserviceaccount.com" && \\
 gcloud resource-manager org-policies enable-enforce constraints/iam.disableServiceAccountKeyCreation --project=${proj}`
     : `gcloud config set project ${proj} && \\
-gcloud storage buckets create gs://${bkt} --location=us-central1 && \\
+(gcloud storage buckets describe gs://${bkt} >/dev/null 2>&1 || gcloud storage buckets create gs://${bkt} --location=us-central1) && \\
 gcloud iam service-accounts create lakehouse-catalog --display-name="lakehouse-catalog" && \\
 gcloud projects add-iam-policy-binding ${proj} --member="serviceAccount:lakehouse-catalog@${proj}.iam.gserviceaccount.com" --role="roles/storage.admin" && \\
 gcloud iam service-accounts keys create /dev/stdout --iam-account="lakehouse-catalog@${proj}.iam.gserviceaccount.com"`;
@@ -177,17 +180,41 @@ gcloud iam service-accounts keys create /dev/stdout --iam-account="lakehouse-cat
       {cfg.type === "gcs" && (
         <div className="space-y-3 animate-in fade-in duration-200">
           <div className="space-y-1">
-            <label className="text-[11px] font-bold uppercase tracking-wider text-gray-500 block">
-              Bucket Name
-            </label>
+            <div className="flex justify-between items-center">
+              <label className="text-[11px] font-bold uppercase tracking-wider text-gray-500 block">
+                Bucket Name
+              </label>
+              <button
+                type="button"
+                onClick={() => {
+                  if (isUnlocked) {
+                    setCfg((c) => ({ ...c, bucket: defaultBucket }));
+                  }
+                  setIsUnlocked(!isUnlocked);
+                }}
+                className="text-[10px] text-ice-400 hover:text-ice-300 font-semibold underline"
+              >
+                {isUnlocked ? "Lock (Reset to default)" : "✏️ Unlock / Change"}
+              </button>
+            </div>
             <input
               type="text"
               required
+              disabled={!isUnlocked}
               value={cfg.bucket}
               onChange={(e) => setCfg((c) => ({ ...c, bucket: e.target.value }))}
               placeholder={defaultBucket}
-              className="w-full px-3 py-2 bg-ink-950 text-xs rounded border border-ink-700/60 focus:border-ice-500/40 outline-none text-gray-200 font-semibold"
+              className={`w-full px-3 py-2 bg-ink-950 text-xs rounded border outline-none font-semibold ${
+                isUnlocked
+                  ? "border-amber-500/40 text-amber-200 focus:border-amber-500/60"
+                  : "border-ink-700/60 text-gray-400 opacity-80 cursor-not-allowed"
+              }`}
             />
+            {isUnlocked && (
+              <p className="text-[9px] text-amber-500/80 leading-normal mt-1 animate-in fade-in slide-in-from-top-1 duration-150">
+                ⚠️ Warning: Custom bucket names will not be automatically deleted by <code>destroy.sh</code> to prevent accidental data loss of existing GCS resources.
+              </p>
+            )}
           </div>
 
           {/* GCP Onboarding Helper script box */}

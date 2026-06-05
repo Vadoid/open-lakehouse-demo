@@ -17,6 +17,7 @@ export async function GET() {
     type: cfg.type,
     bucket: cfg.bucket || defaultGcsBucket,
     hasKey: !!cfg.gcsKey,
+    isCustomBucket: !!cfg.isCustomBucket,
     defaultGcsBucket,
   });
 }
@@ -24,7 +25,12 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { type, bucket, gcsKey } = body as { type: "minio" | "gcs"; bucket: string; gcsKey?: string };
+    const { type, bucket, gcsKey, isCustomBucket } = body as {
+      type: "minio" | "gcs";
+      bucket: string;
+      gcsKey?: string;
+      isCustomBucket?: boolean;
+    };
 
     if (!type || !bucket) {
       return NextResponse.json({ error: "Missing type or bucket parameters" }, { status: 400 });
@@ -127,7 +133,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 4. Update memory cache configurations and clear runs
-    cache.storageConfig = { type, bucket, gcsKey };
+    cache.storageConfig = { type, bucket, gcsKey, isCustomBucket };
     cache.runs = {}; // Reset completed steps so they run on new warehouse
     cache.lastSeenFiles = undefined;
 
