@@ -334,7 +334,7 @@ export default function WrapUp() {
             <div className="text-gray-400 font-semibold mb-1">Reset</div>
             <p>
               Run <code className="text-gray-300">terraform destroy -auto-approve</code> then{" "}
-              <code className="text-gray-300">./start.sh</code> for a clean stack. Or hit{" "}
+              <code className="text-gray-300">./deploy.sh</code> for a clean stack. Or hit{" "}
               <button onClick={async () => { await fetch("/api/reset", { method: "POST" }); fetchData(); }}
                       className="text-ice-400 hover:text-ice-200 underline">/api/reset</button>{" "}
               to wipe tables only.

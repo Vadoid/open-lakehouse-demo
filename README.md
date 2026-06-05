@@ -48,18 +48,18 @@ is a thin server that talks to all three at once.
 ### One-shot (recommended)
 
 ```bash
-./start.sh
+./deploy.sh
 ```
 
-`start.sh` ensures the Docker daemon is running (launches Docker Desktop on
+`deploy.sh` ensures the Docker daemon is running (launches Docker Desktop on
 macOS, `systemctl start docker` on Linux), runs `terraform init` /
 `terraform apply`, and waits for the Spark Thrift Server to accept JDBC. The
 stack comes up **empty** so you can run each step yourself from the webapp.
 Set `RUN_DEMO=1` to batch the whole `sql/demo.sql` through beeline instead.
 
 ```bash
-./start.sh                           # bring up an empty stack (run steps in the webapp)
-RUN_DEMO=1 ./start.sh                # bring up + run all of demo.sql end-to-end
+./deploy.sh                          # bring up an empty stack (run steps in the webapp)
+RUN_DEMO=1 ./deploy.sh               # bring up + run all of demo.sql end-to-end
 ./destroy.sh                         # tear down (destroy + force-remove any stragglers)
 ```
 
@@ -98,7 +98,7 @@ State is in-memory; the cache resets when `demo-webapp` restarts.
 
 ```
 main.tf, variables.tf, outputs.tf   # Terraform root
-start.sh                            # one-shot launcher (Docker → terraform → beeline)
+deploy.sh                           # one-shot launcher (Docker → terraform → beeline)
 destroy.sh                          # teardown (terraform destroy + force-remove stragglers)
 scripts/bootstrap.sh                # MinIO bucket + Lakekeeper warehouse registration
 sql/demo.sql                        # V3 showcase (mounted into spark-thrift at /opt/demo)
@@ -186,14 +186,14 @@ Sources for the comparison are linked in the [footer](#sources).
 
 ## Troubleshooting
 
-These mostly bite on a fresh Linux VM, not on Docker Desktop. `start.sh`
+These mostly bite on a fresh Linux VM, not on Docker Desktop. `deploy.sh`
 handles them for you; the manual `terraform` path doesn't, so here's what
 breaks and how to fix it by hand.
 
 ### Docker daemon won't start (`Unit docker.service not found`)
 
 The daemon ships under a different unit name on some installs, so a plain
-`sudo systemctl start docker` misses it. `start.sh` probes `docker.service`,
+`sudo systemctl start docker` misses it. `deploy.sh` probes `docker.service`,
 `snap.docker.dockerd.service`, the `docker-desktop` user unit, then falls back
 to `snap start docker` and SysV `service docker start`. If none exist, Docker
 Engine probably isn't installed: `curl -fsSL https://get.docker.com | sudo sh`.
@@ -214,7 +214,7 @@ export DOCKER_HOST=$(docker context inspect -f '{{ .Endpoints.docker.Host }}')
 # or just: docker context use default
 ```
 
-`start.sh` does this for you (`align_docker_host`), and `bootstrap.sh` reads the
+`deploy.sh` does this for you (`align_docker_host`), and `bootstrap.sh` reads the
 network straight off the `lake-minio` container instead of trusting the
 passed-in name.
 
@@ -236,7 +236,7 @@ docker rm -f lake-postgres lake-minio lakekeeper lake-migrate spark-thrift demo-
 docker network rm lakedemo
 ```
 
-`start.sh` reconciles this automatically before `apply` (imports the orphan, or
+`deploy.sh` reconciles this automatically before `apply` (imports the orphan, or
 removes it if the import fails). The same class of error can hit container names
 (`container name already in use`) — clear them with the `docker rm -f` line above.
 
@@ -266,8 +266,8 @@ sudo systemctl restart docker
 ```
 
 Find your upstream with `resolvectl status` or `nmcli dev show | grep DNS`.
-`start.sh` (`ensure_container_internet`) probes container DNS and writes this
-config for you on Linux. Skip the whole check with `SKIP_NET_CHECK=1 ./start.sh`
+`deploy.sh` (`ensure_container_internet`) probes container DNS and writes this
+config for you on Linux. Skip the whole check with `SKIP_NET_CHECK=1 ./deploy.sh`
 when you're offline and building against pre-pulled images. On macOS / Docker
 Desktop, set the `dns` key under Settings → Docker Engine instead.
 

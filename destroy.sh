@@ -14,7 +14,7 @@ CONTAINERS=(lake-postgres lake-minio lakekeeper lake-migrate spark-thrift demo-w
 NETWORK=lakedemo
 
 # ---------------------------------------------------------------------------
-# Align with the CLI's active context, same as start.sh. The Terraform docker
+# Align with the CLI's active context, same as deploy.sh. The Terraform docker
 # provider honors DOCKER_HOST but ignores `docker context`; exporting the
 # context endpoint makes `terraform destroy` and the docker CLI hit one daemon.
 # ---------------------------------------------------------------------------
