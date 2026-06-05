@@ -47,13 +47,34 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing type or bucket parameters" }, { status: 400 });
     }
 
-    // 1. Delete current warehouse from Lakekeeper catalog (ignore errors if it doesn't exist)
+    // 1. Resolve the warehouse ID (prefix) before deleting it
+    let warehouseId = "";
     try {
-      await fetch(`${LK_URL}/management/v1/warehouse/${WAREHOUSE}`, {
-        method: "DELETE",
+      const configRes = await fetch(`${LK_URL}/catalog/v1/config?warehouse=${WAREHOUSE}`, {
+        headers: { Authorization: "Bearer dummy" },
+        cache: "no-store",
       });
+      if (configRes.ok) {
+        const configJson = await configRes.json();
+        warehouseId = configJson.defaults?.prefix ?? configJson.overrides?.prefix ?? "";
+      }
     } catch (err) {
-      console.warn("Could not delete old warehouse from Lakekeeper:", err);
+      console.warn("Could not resolve prefix for deletion:", err);
+    }
+
+    // 2. Delete the warehouse using its resolved UUID
+    if (warehouseId) {
+      try {
+        const delRes = await fetch(`${LK_URL}/management/v1/warehouse/${warehouseId}`, {
+          method: "DELETE",
+        });
+        if (!delRes.ok) {
+          const delText = await delRes.text();
+          console.warn(`DELETE warehouse ${warehouseId} returned ${delRes.status}: ${delText}`);
+        }
+      } catch (err) {
+        console.warn("Could not delete old warehouse from Lakekeeper:", err);
+      }
     }
 
     // 2. Register the new warehouse with Lakekeeper catalog
