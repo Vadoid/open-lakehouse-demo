@@ -23,6 +23,7 @@ export default function StorageSetupForm({ onSuccess, onCancel, showCancel = tru
   const [defaultBucket, setDefaultBucket] = useState("");
   const [projectId, setProjectId] = useState("");
   const [copied, setCopied] = useState(false);
+  const [bypassOrgPolicy, setBypassOrgPolicy] = useState(false);
 
   useEffect(() => {
     fetch("/api/storage-setup")
@@ -71,7 +72,16 @@ export default function StorageSetupForm({ onSuccess, onCancel, showCancel = tru
 
   const proj = projectId || "[PROJECT_ID]";
   const bkt = cfg.bucket || defaultBucket || "open-lakehouse-bucket";
-  const gcloudScript = `gcloud config set project ${proj} && \\
+  
+  const gcloudScript = bypassOrgPolicy
+    ? `gcloud config set project ${proj} && \\
+gcloud resource-manager org-policies disable-enforce constraints/iam.disableServiceAccountKeyCreation --project=${proj} && \\
+gcloud storage buckets create gs://${bkt} --location=us-central1 && \\
+gcloud iam service-accounts create lakehouse-catalog --display-name="lakehouse-catalog" && \\
+gcloud projects add-iam-policy-binding ${proj} --member="serviceAccount:lakehouse-catalog@${proj}.iam.gserviceaccount.com" --role="roles/storage.admin" && \\
+gcloud iam service-accounts keys create /dev/stdout --iam-account="lakehouse-catalog@${proj}.iam.gserviceaccount.com" && \\
+gcloud resource-manager org-policies enable-enforce constraints/iam.disableServiceAccountKeyCreation --project=${proj}`
+    : `gcloud config set project ${proj} && \\
 gcloud storage buckets create gs://${bkt} --location=us-central1 && \\
 gcloud iam service-accounts create lakehouse-catalog --display-name="lakehouse-catalog" && \\
 gcloud projects add-iam-policy-binding ${proj} --member="serviceAccount:lakehouse-catalog@${proj}.iam.gserviceaccount.com" --role="roles/storage.admin" && \\
@@ -188,18 +198,38 @@ gcloud iam service-accounts keys create /dev/stdout --iam-account="lakehouse-cat
             <p className="text-[10px] text-gray-500 leading-normal">
               Need to set up the bucket and service account? Enter your Google Cloud Project ID below to generate a pre-configured script. Paste this into Cloud Shell to bootstrap instantly.
             </p>
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500 block">GCP Project ID</label>
-              <input
-                type="text"
-                value={projectId}
-                onChange={(e) => setProjectId(e.target.value)}
-                placeholder="my-gcp-project"
-                className="w-full px-3 py-1.5 bg-ink-950 text-xs rounded border border-ink-700/60 focus:border-ice-500/40 outline-none text-gray-200"
-              />
+            <div className="space-y-2">
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500 block">GCP Project ID</label>
+                <input
+                  type="text"
+                  value={projectId}
+                  onChange={(e) => setProjectId(e.target.value)}
+                  placeholder="my-gcp-project"
+                  className="w-full px-3 py-1.5 bg-ink-950 text-xs rounded border border-ink-700/60 focus:border-ice-500/40 outline-none text-gray-200"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="flex items-start gap-2 text-[10px] text-gray-400 hover:text-gray-200 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={bypassOrgPolicy}
+                    onChange={(e) => setBypassOrgPolicy(e.target.checked)}
+                    className="accent-ice-500 mt-0.5"
+                  />
+                  <span>
+                    My project restricts SA key creation (temporarily bypass Org Policy)
+                  </span>
+                </label>
+                {bypassOrgPolicy && (
+                  <p className="text-[9px] text-amber-500/80 leading-normal pl-5 animate-in fade-in slide-in-from-top-1 duration-150">
+                    ℹ️ This wraps the script in `resource-manager` commands to temporarily disable the service account key constraint, download the key, and re-enable it immediately. Requires Project Owner or Org Policy Administrator privileges.
+                  </p>
+                )}
+              </div>
             </div>
             <div className="relative">
-              <div className="p-2.5 bg-ink-950 text-[10px] font-mono rounded overflow-x-auto text-gray-300 border border-ink-800 max-h-32 scrollbar-thin leading-relaxed whitespace-pre-wrap">
+              <div className="p-2.5 bg-ink-950 text-[10px] font-mono rounded overflow-x-auto text-gray-300 border border-ink-800 max-h-36 scrollbar-thin leading-relaxed whitespace-pre-wrap">
                 {gcloudScript.split("\n").map((line, i) => (
                   <div key={i}>{renderScriptLine(line)}</div>
                 ))}
