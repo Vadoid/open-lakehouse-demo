@@ -183,7 +183,7 @@ resource "docker_container" "spark_thrift" {
       set -e
       ICEBERG_VER=1.11.0
       MAVEN=https://repo1.maven.org/maven2/org/apache/iceberg
-      for j in iceberg-spark-runtime-3.5_2.12-$${ICEBERG_VER} iceberg-aws-bundle-$${ICEBERG_VER}; do
+      for j in iceberg-spark-runtime-3.5_2.12-$${ICEBERG_VER} iceberg-aws-bundle-$${ICEBERG_VER} iceberg-gcp-bundle-$${ICEBERG_VER}; do
         artifact=$${j%-$${ICEBERG_VER}}
         dst=/opt/spark/jars/$${j}.jar
         if [ ! -f $${dst} ]; then
