@@ -65,6 +65,41 @@ export async function POST(req: NextRequest) {
     // 2. Delete the warehouse using its resolved UUID
     if (warehouseId) {
       try {
+        const headers = { Authorization: "Bearer dummy" };
+        
+        // a. List namespaces
+        const nsRes = await fetch(`${LK_URL}/catalog/v1/${warehouseId}/namespaces`, { headers });
+        if (nsRes.ok) {
+          const nsJson = await nsRes.json();
+          const namespaces: string[][] = nsJson.namespaces || [];
+          
+          for (const ns of namespaces) {
+            const encNs = ns.map(encodeURIComponent).join("%1F");
+            
+            // b. List tables in namespace
+            const tablesRes = await fetch(`${LK_URL}/catalog/v1/${warehouseId}/namespaces/${encNs}/tables`, { headers });
+            if (tablesRes.ok) {
+              const tablesJson = await tablesRes.json();
+              const identifiers = tablesJson.identifiers || [];
+              for (const tbl of identifiers) {
+                const encTbl = encodeURIComponent(tbl.name);
+                // c. Delete table
+                await fetch(`${LK_URL}/catalog/v1/${warehouseId}/namespaces/${encNs}/tables/${encTbl}`, {
+                  method: "DELETE",
+                  headers,
+                });
+              }
+            }
+            
+            // d. Delete namespace
+            await fetch(`${LK_URL}/catalog/v1/${warehouseId}/namespaces/${encNs}`, {
+              method: "DELETE",
+              headers,
+            });
+          }
+        }
+
+        // e. Finally delete the warehouse
         const delRes = await fetch(`${LK_URL}/management/v1/warehouse/${warehouseId}`, {
           method: "DELETE",
         });
@@ -76,7 +111,7 @@ export async function POST(req: NextRequest) {
         }
       } catch (err: any) {
         return NextResponse.json({
-          error: `Could not delete old warehouse from Lakekeeper: ${err.message}`
+          error: `Could not clean up old warehouse from Lakekeeper: ${err.message}`
         }, { status: 500 });
       }
     }
