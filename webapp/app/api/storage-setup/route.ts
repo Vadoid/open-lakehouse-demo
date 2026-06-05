@@ -70,10 +70,14 @@ export async function POST(req: NextRequest) {
         });
         if (!delRes.ok) {
           const delText = await delRes.text();
-          console.warn(`DELETE warehouse ${warehouseId} returned ${delRes.status}: ${delText}`);
+          return NextResponse.json({
+            error: `DELETE warehouse ${warehouseId} failed (status ${delRes.status}): ${delText}`
+          }, { status: 500 });
         }
-      } catch (err) {
-        console.warn("Could not delete old warehouse from Lakekeeper:", err);
+      } catch (err: any) {
+        return NextResponse.json({
+          error: `Could not delete old warehouse from Lakekeeper: ${err.message}`
+        }, { status: 500 });
       }
     }
 
