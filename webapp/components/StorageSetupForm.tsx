@@ -73,6 +73,49 @@ gcloud iam service-accounts create lakehouse-catalog --display-name="lakehouse-c
 gcloud projects add-iam-policy-binding ${proj} --member="serviceAccount:lakehouse-catalog@${proj}.iam.gserviceaccount.com" --role="roles/storage.admin" && \\
 gcloud iam service-accounts keys create /dev/stdout --iam-account="lakehouse-catalog@${proj}.iam.gserviceaccount.com"`;
 
+  function copyToClipboard(text: string) {
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }).catch(() => fallbackCopy(text));
+    } else {
+      fallbackCopy(text);
+    }
+  }
+
+  function fallbackCopy(text: string) {
+    const textArea = document.createElement("textarea");
+    textArea.value = text;
+    textArea.style.position = "fixed";
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    try {
+      document.execCommand("copy");
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error("Fallback copy failed:", err);
+    }
+    document.body.removeChild(textArea);
+  }
+
+  function renderScriptLine(line: string) {
+    if (!line) return "";
+    const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const parts = line.split(new RegExp(`(${escapeRegExp(bkt)}|${escapeRegExp(proj)})`, 'g'));
+    return parts.map((part, i) => {
+      if (part === bkt) {
+        return <span key={i} className="text-sky-400 font-bold bg-sky-500/10 px-1 rounded border border-sky-500/20">{part}</span>;
+      }
+      if (part === proj) {
+        return <span key={i} className="text-amber-400 font-bold bg-amber-500/10 px-1 rounded border border-amber-500/20">{part}</span>;
+      }
+      return part;
+    });
+  }
+
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="space-y-1.5">
@@ -152,16 +195,14 @@ gcloud iam service-accounts keys create /dev/stdout --iam-account="lakehouse-cat
               />
             </div>
             <div className="relative">
-              <pre className="p-2.5 bg-ink-950 text-[10px] font-mono rounded overflow-x-auto text-gray-300 border border-ink-800 max-h-32 scrollbar-thin select-all leading-normal whitespace-pre-wrap">
-                {gcloudScript}
-              </pre>
+              <div className="p-2.5 bg-ink-950 text-[10px] font-mono rounded overflow-x-auto text-gray-300 border border-ink-800 max-h-32 scrollbar-thin leading-relaxed whitespace-pre-wrap">
+                {gcloudScript.split("\n").map((line, i) => (
+                  <div key={i}>{renderScriptLine(line)}</div>
+                ))}
+              </div>
               <button
                 type="button"
-                onClick={() => {
-                  navigator.clipboard.writeText(gcloudScript);
-                  setCopied(true);
-                  setTimeout(() => setCopied(false), 2000);
-                }}
+                onClick={() => copyToClipboard(gcloudScript)}
                 className="absolute right-2 top-2 px-2 py-1 bg-ink-800 hover:bg-ink-700 text-[10px] text-gray-300 rounded border border-ink-700 transition"
               >
                 {copied ? "Copied! ✓" : "Copy"}

@@ -1,19 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cache } from "@/lib/cache";
-import os from "os";
-import crypto from "crypto";
-
 const LK_URL = process.env.LAKEKEEPER_URL ?? "http://lakekeeper:8181";
 const WAREHOUSE = process.env.LAKEKEEPER_WAREHOUSE ?? "demo";
 
 export const dynamic = "force-dynamic";
 
 function getDeterministicBucketName() {
-  const hash = crypto.createHash("md5")
-    .update(os.hostname() + (os.userInfo().username || "user"))
-    .digest("hex")
-    .slice(0, 8);
-  return `open-lakehouse-${hash}`;
+  const suffix = process.env.HOST_SUFFIX || "default";
+  return `open-lakehouse-${suffix}`;
 }
 
 export async function GET() {

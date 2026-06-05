@@ -115,6 +115,7 @@ locals {
     "LAKEKEEPER__PG_ENCRYPTION_KEY=demo-only-not-a-real-key",
     "LAKEKEEPER__AUTHZ_BACKEND=allow-all",
   ]
+  host_suffix = substr(md5(abspath(path.module)), 0, 8)
 }
 
 # ----------------------------------------------------------------------------
@@ -265,5 +266,6 @@ resource "docker_container" "webapp" {
     "MINIO_ACCESS_KEY=${var.s3_access_key}",
     "MINIO_SECRET_KEY=${var.s3_secret_key}",
     "MINIO_BUCKET=${var.bucket}",
+    "HOST_SUFFIX=${local.host_suffix}",
   ]
 }
