@@ -13,12 +13,23 @@ function getDeterministicBucketName() {
 export async function GET() {
   const cfg = cache.storageConfig ?? { type: "minio", bucket: "warehouse" };
   const defaultGcsBucket = getDeterministicBucketName();
+  const hostSuffix = process.env.HOST_SUFFIX || "default";
+  
+  let projectId = "";
+  if (cfg.gcsKey) {
+    try {
+      projectId = JSON.parse(cfg.gcsKey).project_id || "";
+    } catch {}
+  }
+
   return NextResponse.json({
     type: cfg.type,
     bucket: cfg.bucket || defaultGcsBucket,
     hasKey: !!cfg.gcsKey,
     isCustomBucket: !!cfg.isCustomBucket,
     defaultGcsBucket,
+    hostSuffix,
+    projectId,
   });
 }
 

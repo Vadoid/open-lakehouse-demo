@@ -25,6 +25,7 @@ export default function StorageSetupForm({ onSuccess, onCancel, showCancel = tru
   const [copied, setCopied] = useState(false);
   const [bypassOrgPolicy, setBypassOrgPolicy] = useState(false);
   const [isUnlocked, setIsUnlocked] = useState(false);
+  const [hostSuffix, setHostSuffix] = useState("default");
 
   useEffect(() => {
     fetch("/api/storage-setup")
@@ -37,6 +38,7 @@ export default function StorageSetupForm({ onSuccess, onCancel, showCancel = tru
         });
         setDefaultBucket(j.defaultGcsBucket || "");
         setIsUnlocked(!!j.isCustomBucket);
+        setHostSuffix(j.hostSuffix || "default");
       })
       .catch(() => {});
   }, []);
@@ -75,20 +77,21 @@ export default function StorageSetupForm({ onSuccess, onCancel, showCancel = tru
 
   const proj = projectId || "[PROJECT_ID]";
   const bkt = cfg.bucket || defaultBucket || "open-lakehouse-bucket";
+  const saName = `lakehouse-catalog-${hostSuffix}`;
   
   const gcloudScript = bypassOrgPolicy
     ? `gcloud config set project ${proj} && \\
 gcloud resource-manager org-policies disable-enforce constraints/iam.disableServiceAccountKeyCreation --project=${proj} && \\
 (gcloud storage buckets describe gs://${bkt} >/dev/null 2>&1 || gcloud storage buckets create gs://${bkt} --location=us-central1) && \\
-gcloud iam service-accounts create lakehouse-catalog --display-name="lakehouse-catalog" && \\
-gcloud projects add-iam-policy-binding ${proj} --member="serviceAccount:lakehouse-catalog@${proj}.iam.gserviceaccount.com" --role="roles/storage.admin" && \\
-gcloud iam service-accounts keys create /dev/stdout --iam-account="lakehouse-catalog@${proj}.iam.gserviceaccount.com" && \\
+(gcloud iam service-accounts describe ${saName}@${proj}.iam.gserviceaccount.com --project=${proj} >/dev/null 2>&1 || gcloud iam service-accounts create ${saName} --display-name="${saName}" --project=${proj}) && \\
+gcloud projects add-iam-policy-binding ${proj} --member="serviceAccount:${saName}@${proj}.iam.gserviceaccount.com" --role="roles/storage.admin" && \\
+gcloud iam service-accounts keys create /dev/stdout --iam-account="${saName}@${proj}.iam.gserviceaccount.com" && \\
 gcloud resource-manager org-policies enable-enforce constraints/iam.disableServiceAccountKeyCreation --project=${proj}`
     : `gcloud config set project ${proj} && \\
 (gcloud storage buckets describe gs://${bkt} >/dev/null 2>&1 || gcloud storage buckets create gs://${bkt} --location=us-central1) && \\
-gcloud iam service-accounts create lakehouse-catalog --display-name="lakehouse-catalog" && \\
-gcloud projects add-iam-policy-binding ${proj} --member="serviceAccount:lakehouse-catalog@${proj}.iam.gserviceaccount.com" --role="roles/storage.admin" && \\
-gcloud iam service-accounts keys create /dev/stdout --iam-account="lakehouse-catalog@${proj}.iam.gserviceaccount.com"`;
+(gcloud iam service-accounts describe ${saName}@${proj}.iam.gserviceaccount.com --project=${proj} >/dev/null 2>&1 || gcloud iam service-accounts create ${saName} --display-name="${saName}" --project=${proj}) && \\
+gcloud projects add-iam-policy-binding ${proj} --member="serviceAccount:${saName}@${proj}.iam.gserviceaccount.com" --role="roles/storage.admin" && \\
+gcloud iam service-accounts keys create /dev/stdout --iam-account="${saName}@${proj}.iam.gserviceaccount.com"`;
 
   function copyToClipboard(text: string) {
     if (navigator.clipboard && window.isSecureContext) {
@@ -121,13 +124,16 @@ gcloud iam service-accounts keys create /dev/stdout --iam-account="lakehouse-cat
   function renderScriptLine(line: string) {
     if (!line) return "";
     const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const parts = line.split(new RegExp(`(${escapeRegExp(bkt)}|${escapeRegExp(proj)})`, 'g'));
+    const parts = line.split(new RegExp(`(${escapeRegExp(bkt)}|${escapeRegExp(proj)}|${escapeRegExp(saName)})`, 'g'));
     return parts.map((part, i) => {
       if (part === bkt) {
         return <span key={i} className="text-sky-400 font-bold bg-sky-500/10 px-1 rounded border border-sky-500/20">{part}</span>;
       }
       if (part === proj) {
         return <span key={i} className="text-amber-400 font-bold bg-amber-500/10 px-1 rounded border border-amber-500/20">{part}</span>;
+      }
+      if (part === saName) {
+        return <span key={i} className="text-emerald-400 font-bold bg-emerald-500/10 px-1 rounded border border-emerald-500/20">{part}</span>;
       }
       return part;
     });

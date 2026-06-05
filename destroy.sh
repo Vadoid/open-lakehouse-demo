@@ -18,6 +18,8 @@ NETWORK=lakedemo
 # ---------------------------------------------------------------------------
 GCS_BUCKET=""
 IS_CUSTOM_BUCKET=""
+HOST_SUFFIX=""
+PROJECT_ID=""
 
 if docker inspect demo-webapp >/dev/null 2>&1; then
   echo ">> querying active storage configuration from webapp..."
@@ -27,6 +29,8 @@ if docker inspect demo-webapp >/dev/null 2>&1; then
     if [ "$storage_type" = "gcs" ]; then
       GCS_BUCKET=$(echo "$storage_json" | grep -o '"bucket":"[^"]*"' | head -n1 | cut -d'"' -f4 || true)
       IS_CUSTOM_BUCKET=$(echo "$storage_json" | grep -o '"isCustomBucket":[^,}]*' | head -n1 | tr -d ' ' | cut -d':' -f2 || true)
+      HOST_SUFFIX=$(echo "$storage_json" | grep -o '"hostSuffix":"[^"]*"' | head -n1 | cut -d'"' -f4 || true)
+      PROJECT_ID=$(echo "$storage_json" | grep -o '"projectId":"[^"]*"' | head -n1 | cut -d'"' -f4 || true)
     fi
   fi
 fi
@@ -94,7 +98,7 @@ for sock in /var/run/docker.sock "${XDG_RUNTIME_DIR:-}/docker.sock" "${HOME}/.do
 done
 
 # ---------------------------------------------------------------------------
-# 3. Clean up sandbox GCS bucket if configured and not custom
+# 3. Clean up sandbox GCS bucket and service account if configured and not custom
 # ---------------------------------------------------------------------------
 if [ -n "${GCS_BUCKET}" ]; then
   if [ "${IS_CUSTOM_BUCKET}" = "false" ]; then
@@ -103,6 +107,12 @@ if [ -n "${GCS_BUCKET}" ]; then
   else
     echo ">> skipping GCS bucket gs://${GCS_BUCKET} deletion (custom bucket protection active)"
   fi
+fi
+
+if [ -n "${PROJECT_ID}" ] && [ -n "${HOST_SUFFIX}" ]; then
+  SA_EMAIL="lakehouse-catalog-${HOST_SUFFIX}@${PROJECT_ID}.iam.gserviceaccount.com"
+  echo ">> removing sandbox service account: ${SA_EMAIL}"
+  gcloud iam service-accounts delete "${SA_EMAIL}" --project="${PROJECT_ID}" --quiet || echo "!! failed to delete service account ${SA_EMAIL}; please clean it up manually"
 fi
 
 echo
