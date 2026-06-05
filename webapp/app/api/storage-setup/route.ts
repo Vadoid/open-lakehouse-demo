@@ -67,11 +67,15 @@ export async function POST(req: NextRequest) {
         },
       };
       if (gcsKey) {
-        payload["storage-credential"] = {
-          type: "gcs",
-          "credential-type": "service-account-key",
-          key: gcsKey,
-        };
+        try {
+          payload["storage-credential"] = {
+            type: "gcs",
+            "credential-type": "service-account-key",
+            key: JSON.parse(gcsKey),
+          };
+        } catch (parseErr: any) {
+          return NextResponse.json({ error: `Invalid GCS Service Account JSON: ${parseErr.message}` }, { status: 400 });
+        }
       }
     } else {
       // MinIO fallback
