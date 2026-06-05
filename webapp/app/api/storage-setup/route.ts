@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
       if (gcsKey) {
         payload["storage-credential"] = {
           type: "gcs",
-          "credential-type": "service-account",
+          "credential-type": "service-account-key",
           "service-account-key": gcsKey,
         };
       }
