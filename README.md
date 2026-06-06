@@ -104,10 +104,12 @@ Endpoints: **Webapp `:3030`**, Lakekeeper UI `:8181/ui/`, MinIO console `:9001`,
 `http://localhost:3030` runs the demo from the browser. Each section of
 `sql/demo.sql` is one page: SQL with a Run button on the left, a short
 explanation in the middle, and live state on the right. The right pane
-shows the MinIO file tree (added/changed/removed files colored per
-section), the Lakekeeper catalog, and the Iceberg snapshot timeline.
-Long INSERTs stream progress over SSE so the browser does not time out.
-State is in-memory; the cache resets when `demo-webapp` restarts.
+shows the object-store file tree (MinIO or GCS, with added/changed/removed
+files colored per section), the Lakekeeper catalog, and the Iceberg snapshot
+timeline. Long INSERTs stream progress over SSE so the browser does not time
+out. Step results live in memory and reset when `demo-webapp` restarts; the
+storage config (and GCS key) persists to a volume, so it survives a restart —
+see [Storage targets](#storage-targets--minio-or-gcs).
 
 ### Prereqs
 
