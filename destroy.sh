@@ -98,7 +98,18 @@ for sock in /var/run/docker.sock "${XDG_RUNTIME_DIR:-}/docker.sock" "${HOME}/.do
 done
 
 # ---------------------------------------------------------------------------
-# 3. Optionally clean up the sandbox GCS bucket + service account.
+# 3. Wipe local persisted state (the webapp's storage-config volume). This is
+# host-side, so `terraform destroy` leaves it behind; without removing it the
+# next deploy would skip the setup screen and reuse the old config + SA key.
+# Local only — always safe to delete.
+# ---------------------------------------------------------------------------
+if [ -d .demo-state ]; then
+  echo ">> removing local persisted state (.demo-state)"
+  rm -rf .demo-state
+fi
+
+# ---------------------------------------------------------------------------
+# 4. Optionally clean up the sandbox GCS bucket + service account.
 #
 # OFF by default: a local teardown shouldn't silently delete cloud resources,
 # and `gcloud` can demand an interactive reauth mid-script. Leaving the bucket
