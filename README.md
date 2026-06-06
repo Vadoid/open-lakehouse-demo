@@ -21,16 +21,16 @@ flowchart TB
     web["<b>demo-webapp</b><br/>Next.js&nbsp;15 · React&nbsp;18<br/><i>server routes do all I/O</i>"]
     spark["<b>Spark&nbsp;Thrift&nbsp;Server</b><br/>HiveServer2&nbsp;wire<br/>apache/spark&nbsp;3.5.6<br/>iceberg-spark-runtime&nbsp;1.11.0"]
     lk["<b>Lakekeeper</b><br/>Iceberg&nbsp;REST&nbsp;catalog (Rust)<br/>v0.12.0 · authz: allow-all"]
-    minio["<b>MinIO</b><br/>S3-compatible store<br/>bucket: warehouse<br/>Parquet + Puffin"]
+    minio["<b>Object store</b><br/>MinIO (local) <i>or</i> GCS<br/>Parquet + Puffin"]
     pg["<b>Postgres&nbsp;15</b><br/>Lakekeeper metadata<br/><i>internal</i>"]
 
     user --> web
     web -- "JDBC :10000" --> spark
     web -- "REST :8181" --> lk
-    web -- "S3 :9000" --> minio
+    web -- "S3 :9000 / GCS API" --> minio
     spark <-- "REST catalog" --> lk
     lk -. "SQL · 5432" .-> pg
-    spark -- "S3FileIO · Parquet + Puffin" --> minio
+    spark -- "S3FileIO / GCSFileIO" --> minio
 
     classDef web fill:#1e2a44,stroke:#7c8cc6,color:#dbe5ff
     classDef compute fill:#311e44,stroke:#a17ec6,color:#e9d8ff
