@@ -5,7 +5,10 @@ export type Step = {
   sql: string;
   expect: string;
   inspect: {
-    minio?: { table?: string; subpath?: string; raw?: string; hint: string };
+    // No `table` → the file tree shows the whole warehouse root (storage-aware:
+    // "demo/" on MinIO, bucket root on GCS). With `table`, it shows that table's
+    // prefix (optionally narrowed to `subpath`, e.g. "data/").
+    minio?: { table?: string; subpath?: string; hint: string };
     catalog?: { table?: string };
     snapshots?: { table: string };
     lineage?: { table: string };
@@ -256,7 +259,7 @@ UNION ALL
 SELECT 'v3' AS fmt, file_format, content, count(*) FROM demo.market.trades_v3.delete_files GROUP BY file_format, content;`,
     expect: "v2 row: file_format=parquet. v3 row: file_format=puffin. Same deletion intent, different physical encoding.",
     inspect: {
-      minio: { raw: "demo/", hint: "trades_v2/ tree appears alongside trades_v3/; v2 delete files are parquet" },
+      minio: { hint: "trades_v2/ tree appears alongside trades_v3/; v2 delete files are parquet" },
       catalog: {},
       lineage: { table: "trades_v2" },
     },

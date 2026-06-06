@@ -48,3 +48,6 @@ yarn-error.log*
 .env
 .env.local
 .env.*.local
+
+# Local webapp persisted state (storage config + SA key) — never commit
+.demo-state/

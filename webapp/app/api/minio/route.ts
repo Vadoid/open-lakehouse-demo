@@ -1,19 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
-import { listAll } from "@/lib/s3";
-import { cache, diffSnapshots } from "@/lib/cache";
+import { listStorage } from "@/lib/storage";
+import { cache, diffSnapshots, FileSnapshot } from "@/lib/cache";
+import { resolveStepPrefix } from "@/lib/resolvePrefix";
+import { stepById } from "@/lib/steps";
 
 export const dynamic = "force-dynamic";
 
-// GET /api/minio?prefix=demo/market/trades_v3/&diffStep=3
+// GET /api/minio?step=1&diffStep=3   (or &prefix=demo/market/trades_v3/)
 //
+// `step` (optional): resolve the table prefix server-side, fresh on every
+// request. Table-creating steps don't have a prefix until the step runs, so
+// resolving here (not at page render) lets the tree fill after a Run without a
+// reload.
 // `diffStep` (optional): compare current listing vs the snapshot taken BEFORE
 // step N ran — files added/changed/removed in that step are highlighted.
 
 export async function GET(req: NextRequest) {
-  const prefix = req.nextUrl.searchParams.get("prefix") ?? "demo/";
+  let prefix = req.nextUrl.searchParams.get("prefix") ?? "demo/";
+  const stepParam = req.nextUrl.searchParams.get("step");
   const diffStep = req.nextUrl.searchParams.get("diffStep");
 
-  const snap = await listAll(prefix);
+  if (stepParam) {
+    const step = stepById(Number(stepParam));
+    if (step) prefix = await resolveStepPrefix(step).catch(() => prefix);
+  }
+
+  const snap: FileSnapshot = await listStorage(prefix);
 
   let diff: Record<string, string> | undefined;
   let baseline: "pre-step" | "previous-listing" | undefined;

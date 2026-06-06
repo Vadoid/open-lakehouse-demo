@@ -20,6 +20,7 @@ export default function UnderHoodTabs({
   snapshotsTable,
 }: Props) {
   const [activeTab, setActiveTab] = useState<"minio" | "catalog" | "snapshots">("minio");
+  const [isGcs, setIsGcs] = useState(false);
 
   // Keep active tab valid if tables change across steps
   useEffect(() => {
@@ -29,6 +30,13 @@ export default function UnderHoodTabs({
       setActiveTab("minio");
     }
   }, [catalogTable, snapshotsTable, activeTab]);
+
+  useEffect(() => {
+    fetch("/api/storage-setup")
+      .then((r) => r.json())
+      .then((j) => setIsGcs(j.type === "gcs"))
+      .catch(() => {});
+  }, []);
 
   return (
     <div className="rounded-xl border border-ink-700 bg-ink-900/60 shadow-lg overflow-hidden backdrop-blur-md">
@@ -42,7 +50,7 @@ export default function UnderHoodTabs({
               : "border-transparent text-gray-500 hover:text-gray-300 hover:bg-ink-900/20"
           }`}
         >
-          📂 S3 Storage
+          📂 {isGcs ? "GCS Storage" : "S3 Storage"}
         </button>
         {catalogTable && (
           <button

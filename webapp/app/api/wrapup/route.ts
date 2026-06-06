@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { runOnce } from "@/lib/thrift";
-import { listAll } from "@/lib/s3";
+import { listStorage, warehouseRootPrefix } from "@/lib/storage";
 import { listNamespaces, listTables, loadTable } from "@/lib/lakekeeper";
 
 export const runtime = "nodejs";
@@ -50,9 +50,9 @@ export async function GET() {
     }
   } catch { /* tolerate — v2 may not exist */ }
 
-  // Total bytes in MinIO under demo/.
+  // Total bytes in object storage under the warehouse root.
   try {
-    const snap = await listAll("demo/");
+    const snap = await listStorage(warehouseRootPrefix());
     let bytes = 0, objects = 0;
     for (const k of Object.keys(snap.files)) { bytes += snap.files[k].size; objects++; }
     out.totals.minioObjects = objects;

@@ -17,14 +17,30 @@ export type StepRun = {
   filesAfter?: FileSnapshot;
 };
 
+export type StorageConfig = {
+  type: "minio" | "gcs";
+  bucket: string;
+  gcsKey?: string;
+  isCustomBucket?: boolean;
+};
+
 type CacheShape = {
   runs: Record<number, StepRun>;
   // Most recent file listing per prefix — used for diff coloring across steps.
   lastSeenFiles?: FileSnapshot;
+  storageConfig?: StorageConfig;
 };
 
 const g = globalThis as unknown as { __ic_cache?: CacheShape };
-if (!g.__ic_cache) g.__ic_cache = { runs: {} };
+if (!g.__ic_cache) {
+  g.__ic_cache = {
+    runs: {},
+    storageConfig: {
+      type: "minio",
+      bucket: process.env.MINIO_BUCKET || "warehouse",
+    },
+  };
+}
 
 export const cache = g.__ic_cache;
 

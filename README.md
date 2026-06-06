@@ -4,8 +4,14 @@ Tech demo of an open lakehouse on Apache Iceberg **format-version 3**. One
 `terraform apply` brings up six containers on a single Docker network. SQL is
 driven through the Spark Thrift Server (HiveServer2 wire protocol on `:10000`),
 so `beeline` or any JDBC client works. A Next.js webapp on `:3030` drives the
-same SQL from the browser and shows live state in MinIO, Lakekeeper, and the
-Iceberg snapshot log per step.
+same SQL from the browser and shows live state in the object store, Lakekeeper,
+and the Iceberg snapshot log per step.
+
+Storage is swappable. By default everything lands in MinIO, but the webapp's
+first-run setup screen can point the warehouse at Google Cloud Storage instead.
+The UI relabels itself for whichever target is active — the diagram, file tree,
+lineage graph, and wrap-up all follow. See
+[Storage targets](#storage-targets--minio-or-gcs).
 
 ## Architecture
 
@@ -15,16 +21,16 @@ flowchart TB
     web["<b>demo-webapp</b><br/>Next.js&nbsp;15 · React&nbsp;18<br/><i>server routes do all I/O</i>"]
     spark["<b>Spark&nbsp;Thrift&nbsp;Server</b><br/>HiveServer2&nbsp;wire<br/>apache/spark&nbsp;3.5.6<br/>iceberg-spark-runtime&nbsp;1.11.0"]
     lk["<b>Lakekeeper</b><br/>Iceberg&nbsp;REST&nbsp;catalog (Rust)<br/>v0.12.0 · authz: allow-all"]
-    minio["<b>MinIO</b><br/>S3-compatible store<br/>bucket: warehouse<br/>Parquet + Puffin"]
+    minio["<b>Object store</b><br/>MinIO (local) <i>or</i> GCS<br/>Parquet + Puffin"]
     pg["<b>Postgres&nbsp;15</b><br/>Lakekeeper metadata<br/><i>internal</i>"]
 
     user --> web
     web -- "JDBC :10000" --> spark
     web -- "REST :8181" --> lk
-    web -- "S3 :9000" --> minio
+    web -- "S3 :9000 / GCS API" --> minio
     spark <-- "REST catalog" --> lk
     lk -. "SQL · 5432" .-> pg
-    spark -- "S3FileIO · Parquet + Puffin" --> minio
+    spark -- "S3FileIO / GCSFileIO" --> minio
 
     classDef web fill:#1e2a44,stroke:#7c8cc6,color:#dbe5ff
     classDef compute fill:#311e44,stroke:#a17ec6,color:#e9d8ff
@@ -40,28 +46,43 @@ flowchart TB
 
 Six containers on the `lakedemo` Docker network. Postgres holds Lakekeeper's
 metadata; MinIO holds Iceberg's data and metadata files; Lakekeeper hands
-out S3 paths and table snapshots; Spark Thrift executes the SQL; the webapp
-is a thin server that talks to all three at once.
+out object-store paths and table snapshots; Spark Thrift executes the SQL; the
+webapp is a thin server that talks to all three at once.
+
+In GCS mode a Google Cloud Storage bucket takes MinIO's place. Spark writes
+`gs://` paths through `GCSFileIO` (Iceberg's `ResolvingFileIO` picks the right
+FileIO from the URI scheme), and the webapp reads the bucket with the
+service-account key. Spark itself never gets that key: Lakekeeper vends it a
+short-lived per-table OAuth token via the `X-Iceberg-Access-Delegation` header.
 
 ## Run
 
 ### One-shot (recommended)
 
 ```bash
-./start.sh
+./deploy.sh
 ```
 
-`start.sh` ensures the Docker daemon is running (launches Docker Desktop on
+`deploy.sh` ensures the Docker daemon is running (launches Docker Desktop on
 macOS, `systemctl start docker` on Linux), runs `terraform init` /
 `terraform apply`, and waits for the Spark Thrift Server to accept JDBC. The
 stack comes up **empty** so you can run each step yourself from the webapp.
 Set `RUN_DEMO=1` to batch the whole `sql/demo.sql` through beeline instead.
 
 ```bash
-./start.sh                           # bring up an empty stack (run steps in the webapp)
-RUN_DEMO=1 ./start.sh                # bring up + run all of demo.sql end-to-end
-./destroy.sh                         # tear down (destroy + force-remove any stragglers)
+./deploy.sh                          # bring up an empty stack (run steps in the webapp)
+RUN_DEMO=1 ./deploy.sh               # bring up + run all of demo.sql end-to-end
+./destroy.sh                         # tear down (local only — leaves any GCS bucket/SA)
+CLEANUP_GCS=1 ./destroy.sh           # also delete the auto-created GCS bucket + service account
 ```
+
+`destroy.sh` is local-only by default: it removes the containers and network but
+leaves any auto-created GCS bucket and service account alone. That's deliberate —
+a teardown shouldn't quietly delete cloud resources, `gcloud` can stop to ask you
+to reauthenticate mid-script, and keeping the bucket lets the next deploy reuse it
+instead of re-minting the key and waiting out org-policy propagation. Set
+`CLEANUP_GCS=1` when you actually want them gone; the script prints the manual
+`gcloud` commands either way.
 
 ### Manual
 
@@ -83,10 +104,12 @@ Endpoints: **Webapp `:3030`**, Lakekeeper UI `:8181/ui/`, MinIO console `:9001`,
 `http://localhost:3030` runs the demo from the browser. Each section of
 `sql/demo.sql` is one page: SQL with a Run button on the left, a short
 explanation in the middle, and live state on the right. The right pane
-shows the MinIO file tree (added/changed/removed files colored per
-section), the Lakekeeper catalog, and the Iceberg snapshot timeline.
-Long INSERTs stream progress over SSE so the browser does not time out.
-State is in-memory; the cache resets when `demo-webapp` restarts.
+shows the object-store file tree (MinIO or GCS, with added/changed/removed
+files colored per section), the Lakekeeper catalog, and the Iceberg snapshot
+timeline. Long INSERTs stream progress over SSE so the browser does not time
+out. Step results live in memory and reset when `demo-webapp` restarts; the
+storage config (and GCS key) persists to a volume, so it survives a restart —
+see [Storage targets](#storage-targets--minio-or-gcs).
 
 ### Prereqs
 
@@ -94,15 +117,53 @@ State is in-memory; the cache resets when `demo-webapp` restarts.
 - `terraform` >= 1.5
 - `curl` (for the bootstrap step)
 
+## Storage targets — MinIO or GCS
+
+The stack ships with MinIO so it runs offline, but you can repoint the
+warehouse from the browser without a redeploy.
+
+A setup screen (`SetupGuard`) gates the app until you pick a target. MinIO is
+the default and needs no config. For Google Cloud Storage you enter a project
+and bucket; the screen can also generate a Cloud Shell script that creates the
+bucket, makes a service account, and mints a key. If your org enforces
+`iam.disableServiceAccountKeyCreation`, tick the bypass box — it wraps the
+script to drop the policy, mint the key, and turn the policy back on. Those
+policy changes take a few minutes to propagate, so if key creation fails the
+first time, just run it again.
+
+Picking a target POSTs `/api/storage-setup`, which drops the old warehouse and
+re-registers it in Lakekeeper with the matching storage profile (`s3` for MinIO,
+`gcs` for GCS).
+
+GCS uses two separate credential paths. Spark never sees the SA key — it gets a
+downscoped `gcs.oauth2` token per table from Lakekeeper's load-table response,
+because `spark-defaults.conf` sets `io-impl = ResolvingFileIO` and sends the
+`X-Iceberg-Access-Delegation` header (`iceberg-gcp-bundle` is staged next to
+`iceberg-aws-bundle` in the Spark image). The webapp, on the other hand, reads
+the bucket directly with the SA key to draw the file tree and lineage graph.
+
+The chosen config — SA key included — is written to a host-mounted volume
+(`.demo-state/ → /data` in the webapp container), so it outlives container
+restarts and recreations. This is the fix for an annoying bug: the config used
+to live only in memory, so every restart reset it to MinIO and quietly dropped a
+working GCS warehouse. `SetupGuard` now trusts the server config over the
+browser's `localStorage` flag and reconciles the two. `.demo-state/` is
+gitignored, since it holds a secret.
+
+To go back to MinIO or move to another bucket, clear
+`localStorage.storage_setup_completed`, reload, and pick again.
+
 ## Layout
 
 ```
 main.tf, variables.tf, outputs.tf   # Terraform root
-start.sh                            # one-shot launcher (Docker → terraform → beeline)
+deploy.sh                           # one-shot launcher (Docker → terraform → beeline)
 destroy.sh                          # teardown (terraform destroy + force-remove stragglers)
 scripts/bootstrap.sh                # MinIO bucket + Lakekeeper warehouse registration
 sql/demo.sql                        # V3 showcase (mounted into spark-thrift at /opt/demo)
-spark/spark-defaults.conf           # Iceberg packages + REST catalog wiring
+spark/spark-defaults.conf           # Iceberg packages + REST catalog wiring (ResolvingFileIO)
+webapp/                             # Next.js UI + server routes (storage-aware: MinIO / GCS)
+.demo-state/                        # persisted storage config + SA key (gitignored, mounted → /data)
 ```
 
 ## What the demo shows (18 sections)
@@ -173,9 +234,15 @@ Sources for the comparison are linked in the [footer](#sources).
   add them.
 - Lakekeeper runs **unsecured** (`allow-all`, no IdP) — demo only. For anything
   real, wire an OIDC provider and OpenFGA.
-- Spark uses **static MinIO creds** for determinism. Switch to Lakekeeper
-  **credential vending** in production (drop the `s3.*` keys, set
-  `rest.access-delegation` to `vended-credentials`).
+- Spark uses **static MinIO creds** for determinism in MinIO mode. GCS mode
+  already vends credentials through Lakekeeper (`ResolvingFileIO` + the
+  `X-Iceberg-Access-Delegation` header), so no GCS key reaches Spark — for a
+  production MinIO/S3 deployment you'd drop the `s3.*` keys and vend those too.
+  One sharp edge: the refresh endpoint Lakekeeper hands back points at
+  `localhost:8181` (its `overrides.uri`), which is the wrong host inside the
+  Spark container. Short writes use the initial token and are fine; a job that
+  outlives the ~1 h token can't refresh. Set the Lakekeeper base URI to
+  `http://lakekeeper:8181` if you run into it.
 - Pin versions: `lakekeeper_version` (default `v0.12.0`) and the Spark/Iceberg
   versions in `spark/spark-defaults.conf`. The Lakekeeper warehouse JSON shape is
   version-sensitive — if `apply` fails at bootstrap, check the Storage guide for
@@ -186,14 +253,14 @@ Sources for the comparison are linked in the [footer](#sources).
 
 ## Troubleshooting
 
-These mostly bite on a fresh Linux VM, not on Docker Desktop. `start.sh`
+These mostly bite on a fresh Linux VM, not on Docker Desktop. `deploy.sh`
 handles them for you; the manual `terraform` path doesn't, so here's what
 breaks and how to fix it by hand.
 
 ### Docker daemon won't start (`Unit docker.service not found`)
 
 The daemon ships under a different unit name on some installs, so a plain
-`sudo systemctl start docker` misses it. `start.sh` probes `docker.service`,
+`sudo systemctl start docker` misses it. `deploy.sh` probes `docker.service`,
 `snap.docker.dockerd.service`, the `docker-desktop` user unit, then falls back
 to `snap start docker` and SysV `service docker start`. If none exist, Docker
 Engine probably isn't installed: `curl -fsSL https://get.docker.com | sudo sh`.
@@ -214,7 +281,7 @@ export DOCKER_HOST=$(docker context inspect -f '{{ .Endpoints.docker.Host }}')
 # or just: docker context use default
 ```
 
-`start.sh` does this for you (`align_docker_host`), and `bootstrap.sh` reads the
+`deploy.sh` does this for you (`align_docker_host`), and `bootstrap.sh` reads the
 network straight off the `lake-minio` container instead of trusting the
 passed-in name.
 
@@ -236,7 +303,7 @@ docker rm -f lake-postgres lake-minio lakekeeper lake-migrate spark-thrift demo-
 docker network rm lakedemo
 ```
 
-`start.sh` reconciles this automatically before `apply` (imports the orphan, or
+`deploy.sh` reconciles this automatically before `apply` (imports the orphan, or
 removes it if the import fails). The same class of error can hit container names
 (`container name already in use`) — clear them with the `docker rm -f` line above.
 
@@ -266,8 +333,8 @@ sudo systemctl restart docker
 ```
 
 Find your upstream with `resolvectl status` or `nmcli dev show | grep DNS`.
-`start.sh` (`ensure_container_internet`) probes container DNS and writes this
-config for you on Linux. Skip the whole check with `SKIP_NET_CHECK=1 ./start.sh`
+`deploy.sh` (`ensure_container_internet`) probes container DNS and writes this
+config for you on Linux. Skip the whole check with `SKIP_NET_CHECK=1 ./deploy.sh`
 when you're offline and building against pre-pulled images. On macOS / Docker
 Desktop, set the `dns` key under Settings → Docker Engine instead.
 

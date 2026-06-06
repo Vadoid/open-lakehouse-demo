@@ -115,6 +115,7 @@ locals {
     "LAKEKEEPER__PG_ENCRYPTION_KEY=demo-only-not-a-real-key",
     "LAKEKEEPER__AUTHZ_BACKEND=allow-all",
   ]
+  host_suffix = substr(md5(abspath(path.module)), 0, 8)
 }
 
 # ----------------------------------------------------------------------------
@@ -182,7 +183,7 @@ resource "docker_container" "spark_thrift" {
       set -e
       ICEBERG_VER=1.11.0
       MAVEN=https://repo1.maven.org/maven2/org/apache/iceberg
-      for j in iceberg-spark-runtime-3.5_2.12-$${ICEBERG_VER} iceberg-aws-bundle-$${ICEBERG_VER}; do
+      for j in iceberg-spark-runtime-3.5_2.12-$${ICEBERG_VER} iceberg-aws-bundle-$${ICEBERG_VER} iceberg-gcp-bundle-$${ICEBERG_VER}; do
         artifact=$${j%-$${ICEBERG_VER}}
         dst=/opt/spark/jars/$${j}.jar
         if [ ! -f $${dst} ]; then
@@ -265,5 +266,15 @@ resource "docker_container" "webapp" {
     "MINIO_ACCESS_KEY=${var.s3_access_key}",
     "MINIO_SECRET_KEY=${var.s3_secret_key}",
     "MINIO_BUCKET=${var.bucket}",
+    "HOST_SUFFIX=${local.host_suffix}",
+    "STATE_DIR=/data",
   ]
+
+  # Persist the chosen storage config (incl. GCS SA key) across container
+  # restarts/recreations. Without this the in-memory config resets to the MinIO
+  # default on every restart, silently dropping a configured GCS warehouse.
+  volumes {
+    host_path      = abspath("${path.module}/.demo-state")
+    container_path = "/data"
+  }
 }

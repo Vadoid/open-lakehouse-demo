@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { GetObjectCommand } from "@aws-sdk/client-s3";
-import { s3, BUCKET } from "@/lib/s3";
+import { getObjectBuffer } from "@/lib/storage";
 import { listNamespaces, listTables, loadTable } from "@/lib/lakekeeper";
 import { readManifestList, readManifest } from "@/lib/avro";
 
@@ -32,18 +31,11 @@ function basename(p: string): string {
   return i >= 0 ? p.slice(i + 1) : p;
 }
 
-// S3 location -> bucket-relative key. Lakekeeper records absolute s3://… URIs.
+// Object-store location -> bucket-relative key. Lakekeeper records absolute
+// s3://… (MinIO) or gs://… (GCS) URIs.
 function keyOf(uri: string): string {
-  const m = uri.match(/^s3:\/\/[^/]+\/(.+)$/);
+  const m = uri.match(/^(?:s3|gs):\/\/[^/]+\/(.+)$/);
   return m ? m[1] : uri;
-}
-
-async function getObjectBuffer(key: string): Promise<Buffer> {
-  const r = await s3.send(new GetObjectCommand({ Bucket: BUCKET, Key: key }));
-  const stream = r.Body as any;
-  const chunks: Buffer[] = [];
-  for await (const c of stream) chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c));
-  return Buffer.concat(chunks);
 }
 
 async function buildOne(ns: string[], table: string): Promise<LineageGraph> {
