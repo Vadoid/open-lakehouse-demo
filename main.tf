@@ -267,5 +267,14 @@ resource "docker_container" "webapp" {
     "MINIO_SECRET_KEY=${var.s3_secret_key}",
     "MINIO_BUCKET=${var.bucket}",
     "HOST_SUFFIX=${local.host_suffix}",
+    "STATE_DIR=/data",
   ]
+
+  # Persist the chosen storage config (incl. GCS SA key) across container
+  # restarts/recreations. Without this the in-memory config resets to the MinIO
+  # default on every restart, silently dropping a configured GCS warehouse.
+  volumes {
+    host_path      = abspath("${path.module}/.demo-state")
+    container_path = "/data"
+  }
 }

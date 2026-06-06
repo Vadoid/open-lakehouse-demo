@@ -32,3 +32,17 @@ export async function listAllGcs(bucketName: string, prefix: string, serviceAcco
 
   return out;
 }
+
+export async function getGcsObjectBuffer(bucketName: string, key: string, serviceAccountJson?: string): Promise<Buffer> {
+  const options: any = {};
+  if (serviceAccountJson) {
+    try {
+      options.credentials = JSON.parse(serviceAccountJson);
+    } catch (e) {
+      console.error("Invalid GCS service account JSON key:", e);
+    }
+  }
+  const storage = new Storage(options);
+  const [contents] = await storage.bucket(bucketName).file(key).download();
+  return contents;
+}

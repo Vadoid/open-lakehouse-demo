@@ -67,6 +67,15 @@ const COVERAGE: { feature: string; status: string; step: number | null }[] = [
 export default function WrapUp() {
   const [w, setW] = useState<Wrap | null>(null);
   const [loading, setLoading] = useState(false);
+  const [isGcs, setIsGcs] = useState(false);
+  const store = isGcs ? "GCS" : "MinIO";
+
+  useEffect(() => {
+    fetch("/api/storage-setup")
+      .then((r) => r.json())
+      .then((j) => setIsGcs(j.type === "gcs"))
+      .catch(() => {});
+  }, []);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -173,8 +182,8 @@ export default function WrapUp() {
           <Counter label="Snapshots (total)" value={w?.tables?.reduce((a, t) => a + (t.snapshots || 0), 0) ?? "—"} />
           <Counter label="Puffin DVs" value={w?.totals?.puffinDvs ?? "—"} />
           <Counter label="Positional deletes" value={w?.totals?.positionalDeletes ?? "—"} />
-          <Counter label="MinIO objects" value={w?.totals?.minioObjects ?? "—"} />
-          <Counter label="MinIO bytes" value={fmtBytes(w?.totals?.minioBytes)} />
+          <Counter label={`${store} objects`} value={w?.totals?.minioObjects ?? "—"} />
+          <Counter label={`${store} bytes`} value={fmtBytes(w?.totals?.minioBytes)} />
           <Counter label="Tables" value={w?.tables?.length ?? "—"} />
           <Counter label="Errors" value={w?.errors?.length ?? 0} />
         </div>
@@ -305,7 +314,7 @@ export default function WrapUp() {
               <li>Apache Iceberg 1.11.0 (V3)</li>
               <li>Apache Spark 3.5.6 (Thrift)</li>
               <li>Lakekeeper REST catalog</li>
-              <li>MinIO · Postgres 15</li>
+              <li>{store} · Postgres 15</li>
               <li>Next.js 15 · React 18</li>
             </ul>
           </div>
@@ -317,11 +326,13 @@ export default function WrapUp() {
                   <DynamicText port={8181} path="/ui" />
                 </DynamicLink> · Lakekeeper
               </li>
-              <li>
-                <DynamicLink port={9001} className="hover:text-ice-300" target="_blank" rel="noreferrer">
-                  <DynamicText port={9001} />
-                </DynamicLink> · MinIO <span className="ml-1 inline-block"><CredsRow /></span>
-              </li>
+              {!isGcs && (
+                <li>
+                  <DynamicLink port={9001} className="hover:text-ice-300" target="_blank" rel="noreferrer">
+                    <DynamicText port={9001} />
+                  </DynamicLink> · MinIO <span className="ml-1 inline-block"><CredsRow /></span>
+                </li>
+              )}
               <li>
                 <DynamicLink port={4040} className="hover:text-ice-300" target="_blank" rel="noreferrer">
                   <DynamicText port={4040} />

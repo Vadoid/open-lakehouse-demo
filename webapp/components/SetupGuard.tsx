@@ -7,9 +7,27 @@ export default function SetupGuard({ children }: { children: React.ReactNode }) 
   const [isConfigured, setIsConfigured] = useState(false);
 
   useEffect(() => {
-    const completed = localStorage.getItem("storage_setup_completed") === "true";
-    setIsConfigured(completed);
-    setHasChecked(true);
+    // Server is source of truth: the storage config is persisted on a volume,
+    // so it survives restarts. Reconcile localStorage against it — a stale
+    // "completed" flag must not skip setup after the server lost its config
+    // (e.g. a fresh volume), and a configured server must not re-prompt.
+    fetch("/api/storage-setup")
+      .then((r) => r.json())
+      .then((j) => {
+        const serverConfigured = j?.configured === true;
+        if (serverConfigured) {
+          localStorage.setItem("storage_setup_completed", "true");
+        } else {
+          localStorage.removeItem("storage_setup_completed");
+        }
+        setIsConfigured(serverConfigured);
+      })
+      .catch(() => {
+        // Network/parse failure: fall back to the local flag so we don't lock
+        // the user out of a working stack.
+        setIsConfigured(localStorage.getItem("storage_setup_completed") === "true");
+      })
+      .finally(() => setHasChecked(true));
   }, []);
 
   if (!hasChecked) {

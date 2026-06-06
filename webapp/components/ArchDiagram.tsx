@@ -1,16 +1,40 @@
+"use client";
 // Inline SVG architecture diagram for the demo. No external deps.
-// Six boxes (webapp, Spark Thrift, Lakekeeper, MinIO, Postgres) connected
-// with labelled edges. Colors come from CSS vars (see app/globals.css) so
-// the diagram flips with the theme.
+// Six boxes (webapp, Spark Thrift, Lakekeeper, object store, Postgres)
+// connected with labelled edges. Colors come from CSS vars (see
+// app/globals.css) so the diagram flips with the theme. The object-store box
+// and the data-plane labels swap between MinIO/S3 and GCS depending on the
+// active storage config (fetched from /api/storage-setup).
+
+import { useEffect, useState } from "react";
 
 export default function ArchDiagram() {
+  const [isGcs, setIsGcs] = useState(false);
+  const [bucket, setBucket] = useState("warehouse");
+
+  useEffect(() => {
+    fetch("/api/storage-setup")
+      .then((r) => r.json())
+      .then((j) => {
+        setIsGcs(j.type === "gcs");
+        if (j.bucket) setBucket(j.bucket);
+      })
+      .catch(() => {});
+  }, []);
+
+  const storeName = isGcs ? "GCS" : "MinIO";
+  const storeSub = isGcs ? "Google Cloud Storage" : "S3-compatible object store";
+  const storeEdge = isGcs ? "GCS API · 443" : "S3 :9000";
+  const fileIo = isGcs ? "GCSFileIO · Parquet + Puffin" : "S3FileIO · Parquet + Puffin";
+  const sparkBundle = isGcs ? "iceberg-gcp-bundle 1.11.0" : "iceberg-aws-bundle 1.11.0";
+
   return (
     <svg
       viewBox="0 0 900 560"
       xmlns="http://www.w3.org/2000/svg"
       className="w-full h-auto"
       role="img"
-      aria-label="Architecture diagram: demo-webapp at top fans out to Spark Thrift, Lakekeeper, and MinIO. Lakekeeper backs onto Postgres. Spark Thrift reads and writes MinIO."
+      aria-label={`Architecture diagram: demo-webapp at top fans out to Spark Thrift, Lakekeeper, and ${storeName}. Lakekeeper backs onto Postgres. Spark Thrift reads and writes ${storeName}.`}
     >
       <defs>
         <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
@@ -43,7 +67,7 @@ export default function ArchDiagram() {
         <text x="150" y="280" textAnchor="middle" fontFamily="ui-sans-serif, system-ui" fontSize="11" fill="var(--arch-spark-sub)">HiveServer2 wire protocol</text>
         <text x="150" y="306" textAnchor="middle" fontFamily="ui-monospace, monospace" fontSize="11" fill="var(--arch-spark-sub)">apache/spark 3.5.6</text>
         <text x="150" y="322" textAnchor="middle" fontFamily="ui-monospace, monospace" fontSize="11" fill="var(--arch-spark-sub)">iceberg-spark-runtime 1.11.0</text>
-        <text x="150" y="338" textAnchor="middle" fontFamily="ui-monospace, monospace" fontSize="11" fill="var(--arch-spark-sub)">iceberg-aws-bundle 1.11.0</text>
+        <text x="150" y="338" textAnchor="middle" fontFamily="ui-monospace, monospace" fontSize="11" fill="var(--arch-spark-sub)">{sparkBundle}</text>
       </g>
 
       {/* Lakekeeper */}
@@ -55,12 +79,12 @@ export default function ArchDiagram() {
         <text x="450" y="324" textAnchor="middle" fontFamily="ui-monospace, monospace" fontSize="11" fill="var(--arch-lake-sub)">authz: allow-all (demo)</text>
       </g>
 
-      {/* MinIO */}
+      {/* Object store (MinIO / GCS) */}
       <g>
         <rect x="640" y="230" width="220" height="120" rx="10" fill="var(--arch-minio-bg)" stroke="var(--arch-minio-stroke)" strokeWidth="1.5" />
-        <text x="750" y="260" textAnchor="middle" fontFamily="ui-sans-serif, system-ui" fontWeight="600" fontSize="15" fill="var(--arch-minio-fg)">MinIO</text>
-        <text x="750" y="280" textAnchor="middle" fontFamily="ui-sans-serif, system-ui" fontSize="11" fill="var(--arch-minio-sub)">S3-compatible object store</text>
-        <text x="750" y="306" textAnchor="middle" fontFamily="ui-monospace, monospace" fontSize="11" fill="var(--arch-minio-sub)">bucket: warehouse</text>
+        <text x="750" y="260" textAnchor="middle" fontFamily="ui-sans-serif, system-ui" fontWeight="600" fontSize="15" fill="var(--arch-minio-fg)">{storeName}</text>
+        <text x="750" y="280" textAnchor="middle" fontFamily="ui-sans-serif, system-ui" fontSize="11" fill="var(--arch-minio-sub)">{storeSub}</text>
+        <text x="750" y="306" textAnchor="middle" fontFamily="ui-monospace, monospace" fontSize="11" fill="var(--arch-minio-sub)">bucket: {bucket}</text>
         <text x="750" y="324" textAnchor="middle" fontFamily="ui-monospace, monospace" fontSize="11" fill="var(--arch-minio-sub)">Parquet + Puffin</text>
       </g>
 
@@ -86,11 +110,11 @@ export default function ArchDiagram() {
         <text x="450" y="190" textAnchor="middle" fontFamily="ui-monospace, monospace" fontSize="11" fill="var(--arch-chip-fg)">REST :8181</text>
       </g>
 
-      {/* webapp -> MinIO (S3) */}
+      {/* webapp -> object store */}
       <path d="M 530 144 C 620 180, 700 200, 750 230" stroke="var(--arch-edge)" strokeWidth="1.5" fill="none" markerEnd="url(#arrow)" />
       <g>
-        <rect x="590" y="174" width="110" height="22" rx="11" fill="var(--arch-chip-bg)" stroke="var(--arch-chip-stroke)" />
-        <text x="645" y="190" textAnchor="middle" fontFamily="ui-monospace, monospace" fontSize="11" fill="var(--arch-chip-fg)">S3 :9000</text>
+        <rect x="585" y="174" width="120" height="22" rx="11" fill="var(--arch-chip-bg)" stroke="var(--arch-chip-stroke)" />
+        <text x="645" y="190" textAnchor="middle" fontFamily="ui-monospace, monospace" fontSize="11" fill="var(--arch-chip-fg)">{storeEdge}</text>
       </g>
 
       {/* Spark <-> Lakekeeper (REST catalog) */}
@@ -104,11 +128,11 @@ export default function ArchDiagram() {
         <text x="450" y="414" textAnchor="middle" fontFamily="ui-monospace, monospace" fontSize="11" fill="var(--arch-edge-label)">SQL · 5432</text>
       </g>
 
-      {/* Spark -> MinIO (data plane). Arcs above Postgres, below Lakekeeper. */}
+      {/* Spark -> object store (data plane). Arcs above Postgres, below Lakekeeper. */}
       <path d="M 260 320 C 360 400, 540 400, 640 320" stroke="var(--arch-edge)" strokeWidth="1.5" fill="none" markerEnd="url(#arrow)" />
       <g>
         <rect x="600" y="378" width="210" height="22" rx="11" fill="var(--arch-chip-bg)" stroke="var(--arch-chip-stroke)" />
-        <text x="705" y="394" textAnchor="middle" fontFamily="ui-monospace, monospace" fontSize="11" fill="var(--arch-chip-fg)">S3FileIO · Parquet + Puffin</text>
+        <text x="705" y="394" textAnchor="middle" fontFamily="ui-monospace, monospace" fontSize="11" fill="var(--arch-chip-fg)">{fileIo}</text>
       </g>
     </svg>
   );

@@ -64,20 +64,20 @@ fi
 sweep() {
   local hostflag=("$@")   # e.g. (-H unix:///var/run/docker.sock) or empty
   local label="${hostflag[*]:-current}"
-  docker "${hostflag[@]}" info >/dev/null 2>&1 || return 0   # daemon not reachable here
+  docker ${hostflag[@]+"${hostflag[@]}"} info >/dev/null 2>&1 || return 0   # daemon not reachable here
 
   local found=0 c
   for c in "${CONTAINERS[@]}"; do
-    if docker "${hostflag[@]}" inspect "$c" >/dev/null 2>&1; then
+    if docker ${hostflag[@]+"${hostflag[@]}"} inspect "$c" >/dev/null 2>&1; then
       echo ">> [$label] removing container $c"
-      docker "${hostflag[@]}" rm -f "$c" >/dev/null 2>&1 || true
+      docker ${hostflag[@]+"${hostflag[@]}"} rm -f "$c" >/dev/null 2>&1 || true
       found=1
     fi
   done
 
-  if docker "${hostflag[@]}" network inspect "$NETWORK" >/dev/null 2>&1; then
+  if docker ${hostflag[@]+"${hostflag[@]}"} network inspect "$NETWORK" >/dev/null 2>&1; then
     echo ">> [$label] removing network $NETWORK"
-    docker "${hostflag[@]}" network rm "$NETWORK" >/dev/null 2>&1 \
+    docker ${hostflag[@]+"${hostflag[@]}"} network rm "$NETWORK" >/dev/null 2>&1 \
       || echo "   ($NETWORK still in use? rerun after containers are gone)"
     found=1
   fi
@@ -98,21 +98,42 @@ for sock in /var/run/docker.sock "${XDG_RUNTIME_DIR:-}/docker.sock" "${HOME}/.do
 done
 
 # ---------------------------------------------------------------------------
-# 3. Clean up sandbox GCS bucket and service account if configured and not custom
+# 3. Optionally clean up the sandbox GCS bucket + service account.
+#
+# OFF by default: a local teardown shouldn't silently delete cloud resources,
+# and `gcloud` can demand an interactive reauth mid-script. Leaving the bucket
+# in place also lets a redeploy reuse it instead of re-minting the SA key and
+# waiting out org-policy propagation every time. Opt in with CLEANUP_GCS=1.
 # ---------------------------------------------------------------------------
-if [ -n "${GCS_BUCKET}" ]; then
-  if [ "${IS_CUSTOM_BUCKET}" = "false" ]; then
-    echo ">> removing sandbox GCS bucket: gs://${GCS_BUCKET}"
-    gcloud storage buckets delete "gs://${GCS_BUCKET}" --recursive --quiet || echo "!! failed to delete GCS bucket gs://${GCS_BUCKET}; please clean it up manually"
-  else
-    echo ">> skipping GCS bucket gs://${GCS_BUCKET} deletion (custom bucket protection active)"
-  fi
-fi
-
+SA_EMAIL=""
 if [ -n "${PROJECT_ID}" ] && [ -n "${HOST_SUFFIX}" ]; then
   SA_EMAIL="lakehouse-catalog-${HOST_SUFFIX}@${PROJECT_ID}.iam.gserviceaccount.com"
-  echo ">> removing sandbox service account: ${SA_EMAIL}"
-  gcloud iam service-accounts delete "${SA_EMAIL}" --project="${PROJECT_ID}" --quiet || echo "!! failed to delete service account ${SA_EMAIL}; please clean it up manually"
+fi
+
+if [ -n "${GCS_BUCKET}" ] || [ -n "${SA_EMAIL}" ]; then
+  if [ "${CLEANUP_GCS:-0}" = "1" ]; then
+    if [ -n "${GCS_BUCKET}" ] && [ "${IS_CUSTOM_BUCKET}" = "false" ]; then
+      echo ">> removing sandbox GCS bucket: gs://${GCS_BUCKET}"
+      # `buckets delete` needs an empty bucket (there is no --recursive); empty
+      # it first, then delete the bucket itself.
+      gcloud storage rm --recursive "gs://${GCS_BUCKET}/**" --quiet 2>/dev/null || true
+      gcloud storage buckets delete "gs://${GCS_BUCKET}" --quiet \
+        || echo "!! failed to delete GCS bucket gs://${GCS_BUCKET}; please clean it up manually"
+    elif [ -n "${GCS_BUCKET}" ]; then
+      echo ">> skipping GCS bucket gs://${GCS_BUCKET} (custom bucket protection active)"
+    fi
+    if [ -n "${SA_EMAIL}" ]; then
+      echo ">> removing sandbox service account: ${SA_EMAIL}"
+      gcloud iam service-accounts delete "${SA_EMAIL}" --project="${PROJECT_ID}" --quiet \
+        || echo "!! failed to delete service account ${SA_EMAIL}; please clean it up manually"
+    fi
+  else
+    echo ">> leaving GCS sandbox resources in place (set CLEANUP_GCS=1 to delete). To remove manually:"
+    [ -n "${GCS_BUCKET}" ] && [ "${IS_CUSTOM_BUCKET}" = "false" ] \
+      && echo "     gcloud storage rm --recursive gs://${GCS_BUCKET} && gcloud storage buckets delete gs://${GCS_BUCKET}"
+    [ -n "${SA_EMAIL}" ] \
+      && echo "     gcloud iam service-accounts delete ${SA_EMAIL} --project=${PROJECT_ID}"
+  fi
 fi
 
 echo

@@ -37,10 +37,18 @@ const PHASES = [
 
 export default function Home() {
   const [cfg, setCfg] = useState<DemoConfig>(DEFAULT_CONFIG);
+  const [isGcs, setIsGcs] = useState(false);
+  const [bucket, setBucket] = useState("warehouse");
 
   useEffect(() => {
     setCfg(loadConfig());
+    fetch("/api/storage-setup")
+      .then((r) => r.json())
+      .then((j) => { setIsGcs(j.type === "gcs"); if (j.bucket) setBucket(j.bucket); })
+      .catch(() => {});
   }, []);
+
+  const store = isGcs ? "GCS" : "MinIO";
   return (
     <div className="p-8 max-w-5xl mx-auto space-y-12">
       {/* Hero Header Section */}
@@ -54,7 +62,7 @@ export default function Home() {
         <p className="text-sm md:text-base text-gray-300 leading-relaxed max-w-3xl">
           A fully self-contained open lakehouse running locally on Apache Iceberg{" "}
           <strong className="text-ice-300">version 3</strong>. Built with six Docker containers wired together by Terraform. 
-          Run SQL queries through the Spark Thrift Server; watch table data and metadata land directly in MinIO; manage pointers through Lakekeeper (the open REST catalog). Follow the live timeline and watch your S3 files, schemas, and lineage evolve in real-time.
+          Run SQL queries through the Spark Thrift Server; watch table data and metadata land directly in {store}; manage pointers through Lakekeeper (the open REST catalog). Follow the live timeline and watch your {isGcs ? "object-store" : "S3"} files, schemas, and lineage evolve in real-time.
         </p>
       </header>
 
@@ -74,10 +82,12 @@ export default function Home() {
           <div className="rounded-lg border border-ink-700/60 bg-ink-900/30 p-4 hover:border-ink-700 transition">
             <h3 className="text-ice-300 font-semibold mb-1 flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-ice-400" />
-              MinIO <span className="text-gray-600 font-normal">· object store</span>
+              {store} <span className="text-gray-600 font-normal">· object store</span>
             </h3>
             <p>
-              S3-compatible bucket storage. Iceberg writes parquet data files, manifest lists, and puffin deletion vectors here. Easily swap this out for standard AWS S3, GCS, or Azure Blob in production.
+              {isGcs
+                ? "Google Cloud Storage bucket. Iceberg writes parquet data files, manifest lists, and puffin deletion vectors here. Lakekeeper vends scoped credentials per table. Easily swap this out for AWS S3, MinIO, or Azure Blob in production."
+                : "S3-compatible bucket storage. Iceberg writes parquet data files, manifest lists, and puffin deletion vectors here. Easily swap this out for standard AWS S3, GCS, or Azure Blob in production."}
             </p>
           </div>
           <div className="rounded-lg border border-ink-700/60 bg-ink-900/30 p-4 hover:border-ink-700 transition">
@@ -200,7 +210,7 @@ export default function Home() {
       <section className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 flex gap-3 text-xs text-amber-200 leading-relaxed shadow-sm">
         <div className="flex-none pt-0.5 text-amber-500 text-[14px]">⚠️</div>
         <div>
-          <strong className="font-semibold text-amber-400">Scale Warning:</strong> Step 2 runs bulk inserts utilizing your custom row size setting. Running 1M rows executes in ~15s on standard runtimes; executing 50M rows is heap-bound and requires an optimized memory host. S3 buckets persist on local disks; in-memory caches will clear on container restart.
+          <strong className="font-semibold text-amber-400">Scale Warning:</strong> Step 2 runs bulk inserts utilizing your custom row size setting. Running 1M rows executes in ~15s on standard runtimes; executing 50M rows is heap-bound and requires an optimized memory host. {isGcs ? "Data persists in your GCS bucket" : "MinIO buckets persist on local disks"}; in-memory caches will clear on container restart.
         </div>
       </section>
 
@@ -241,18 +251,31 @@ export default function Home() {
           >
             Lakekeeper UI ↗
           </DynamicLink>
-          <DynamicLink
-            port={9001}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="px-3 py-2 rounded-lg border border-ink-700 text-[11px] text-gray-400 hover:border-ice-500/40 hover:text-ice-200 transition"
-          >
-            MinIO Console ↗
-          </DynamicLink>
-          <div className="text-[11px] text-gray-500 flex items-center gap-1.5 pl-1.5 border-l border-ink-700/60 h-6">
-            <span className="text-gray-600">Login:</span>
-            <CredsRow />
-          </div>
+          {isGcs ? (
+            <a
+              href={`https://console.cloud.google.com/storage/browser/${bucket}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-3 py-2 rounded-lg border border-ink-700 text-[11px] text-gray-400 hover:border-ice-500/40 hover:text-ice-200 transition"
+            >
+              GCS Console ↗
+            </a>
+          ) : (
+            <>
+              <DynamicLink
+                port={9001}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-3 py-2 rounded-lg border border-ink-700 text-[11px] text-gray-400 hover:border-ice-500/40 hover:text-ice-200 transition"
+              >
+                MinIO Console ↗
+              </DynamicLink>
+              <div className="text-[11px] text-gray-500 flex items-center gap-1.5 pl-1.5 border-l border-ink-700/60 h-6">
+                <span className="text-gray-600">Login:</span>
+                <CredsRow />
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -261,7 +284,7 @@ export default function Home() {
         <div>
           <h2 className="text-xs uppercase font-bold tracking-wider text-gray-500">Reset Demo State</h2>
           <p className="text-xs text-gray-400 mt-1 max-w-2xl leading-normal">
-            Drops table schemas in the Lakekeeper catalog and wipes data files inside the MinIO warehouse bucket. 
+            Drops table schemas in the Lakekeeper catalog and wipes data files inside the {store} warehouse bucket.
             Docker containers will stay active, allowing you to restart the demo from a fresh catalog.
           </p>
         </div>
@@ -316,7 +339,7 @@ export default function Home() {
         <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-gray-600 pt-3 border-t border-ink-800/40">
           <a href="https://github.com/Vadoid/open-lakehouse-demo" target="_blank" rel="noopener noreferrer"
              className="hover:text-ice-400 transition-colors">github.com/Vadoid/open-lakehouse-demo</a>
-          <span>Apache Iceberg V3 · Lakekeeper · Spark Thrift · MinIO</span>
+          <span>Apache Iceberg V3 · Lakekeeper · Spark Thrift · {store}</span>
         </div>
       </footer>
     </div>
