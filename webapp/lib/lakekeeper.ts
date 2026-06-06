@@ -8,6 +8,12 @@ const HEADERS = { "Content-Type": "application/json", Authorization: "Bearer dum
 
 let cachedPrefix: string | undefined;
 
+// Call after a storage switch / warehouse re-register — the warehouse UUID
+// prefix changes, so the memoized value would point at the deleted warehouse.
+export function resetPrefixCache(): void {
+  cachedPrefix = undefined;
+}
+
 export async function getPrefix(): Promise<string> {
   if (cachedPrefix) return cachedPrefix;
   const r = await fetch(`${URL_BASE}/catalog/v1/config?warehouse=${WH}`, { headers: HEADERS });
@@ -61,7 +67,8 @@ export async function tableKeyPrefix(ns: string[], table: string): Promise<strin
   const t = await loadTable(ns, table);
   const loc: string | undefined = t?.metadata?.location;
   if (!loc) return null;
-  const m = loc.match(/^s3:\/\/[^/]+\/(.+?)\/?$/);
+  // Accept both s3:// (MinIO) and gs:// (GCS) table locations.
+  const m = loc.match(/^(?:s3|gs):\/\/[^/]+\/(.+?)\/?$/);
   return m ? `${m[1]}/` : null;
 }
 

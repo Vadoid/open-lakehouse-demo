@@ -127,9 +127,10 @@ export default function MinioTree({ prefix, hint, stepId, borderless = false }: 
   const [err, setErr] = useState<string | null>(null);
   const [openMap, setOpenMap] = useState<Set<string>>(new Set());
   const [diffOn, setDiffOn] = useState(true);
+  const [isGcs, setIsGcs] = useState(false);
 
   const fetchData = useCallback(async () => {
-    const q = new URLSearchParams({ prefix });
+    const q = new URLSearchParams({ prefix, step: String(stepId) });
     if (diffOn) q.set("diffStep", String(stepId));
     try {
       const r = await fetch(`/api/minio?${q.toString()}`, { cache: "no-store" });
@@ -141,6 +142,12 @@ export default function MinioTree({ prefix, hint, stepId, borderless = false }: 
 
   useEffect(() => { fetchData(); }, [fetchData]);
   useEffect(() => {
+    fetch("/api/storage-setup")
+      .then((r) => r.json())
+      .then((j) => setIsGcs(j.type === "gcs"))
+      .catch(() => {});
+  }, []);
+  useEffect(() => {
     const h = (e: Event) => {
       const d = (e as CustomEvent).detail;
       if (d?.stepId === stepId || d?.stepId === 0) fetchData();
@@ -149,7 +156,10 @@ export default function MinioTree({ prefix, hint, stepId, borderless = false }: 
     return () => window.removeEventListener("ic:step-ran", h);
   }, [stepId, fetchData]);
 
-  const tree = useMemo(() => data ? buildTree(prefix, data.files) : null, [data, prefix]);
+  // Use the prefix the server actually resolved (table-creating steps resolve
+  // to the real prefix only after the Run), falling back to the SSR prop.
+  const effPrefix = data?.prefix ?? prefix;
+  const tree = useMemo(() => data ? buildTree(data.prefix, data.files) : null, [data]);
   const toggle = (k: string) => setOpenMap((s) => { const n = new Set(s); n.has(k) ? n.delete(k) : n.add(k); return n; });
 
   const counts = useMemo(() => {
@@ -163,7 +173,7 @@ export default function MinioTree({ prefix, hint, stepId, borderless = false }: 
     <div className={borderless ? "" : "rounded border border-ink-700 bg-ink-900/60"}>
       {!borderless ? (
         <div className="flex items-center justify-between border-b border-ink-700 px-3 py-2">
-          <div className="text-xs uppercase tracking-wider text-gray-500">MinIO file tree</div>
+          <div className="text-xs uppercase tracking-wider text-gray-500">{isGcs ? "GCS file tree" : "MinIO file tree"}</div>
           <div className="flex items-center gap-2">
             <label className="text-[10px] text-gray-400 flex items-center gap-1">
               <input type="checkbox" checked={diffOn} onChange={(e) => setDiffOn(e.target.checked)} />
@@ -186,7 +196,7 @@ export default function MinioTree({ prefix, hint, stepId, borderless = false }: 
       )}
       {hint && <div className="px-3 py-1.5 text-[11px] text-gray-500 border-b border-ink-700/60">{hint}</div>}
       <div className="px-3 py-1.5 text-[11px] text-gray-500 border-b border-ink-700/60 font-mono">
-        {prefix} · {data?.count ?? "…"} objects
+        {effPrefix} · {data?.count ?? "…"} objects
         {counts && diffOn && (
           <span className="ml-2">
             <span className="text-emerald-400">+{counts.added}</span>{" "}

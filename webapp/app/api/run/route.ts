@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { stepById } from "@/lib/steps";
 import { runScript } from "@/lib/thrift";
-import { listAll } from "@/lib/s3";
+import { listStorage } from "@/lib/storage";
 import { saveRun } from "@/lib/cache";
 import { resolveStepPrefix } from "@/lib/resolvePrefix";
 
@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
 
   const prefix = await resolveStepPrefix(step).catch(() => "demo/");
   let filesBefore;
-  try { filesBefore = await listAll(prefix); } catch { /* tolerate */ }
+  try { filesBefore = await listStorage(prefix); } catch { /* tolerate */ }
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -65,8 +65,13 @@ export async function POST(req: NextRequest) {
             return;
           }
         }
+        // Re-resolve the prefix: a table-creating step (e.g. step 1) had no
+        // table when `prefix` was first resolved above, so it fell back to the
+        // root. Resolve again now that the table exists, else filesAfter lists
+        // the stale root and the delta stays +0.
+        const afterPrefix = await resolveStepPrefix(step).catch(() => prefix);
         let filesAfter;
-        try { filesAfter = await listAll(prefix); } catch { /* tolerate */ }
+        try { filesAfter = await listStorage(afterPrefix); } catch { /* tolerate */ }
 
         if (!edited) saveRun(step.id, {
           ranAt: new Date().toISOString(),
@@ -88,7 +93,7 @@ export async function POST(req: NextRequest) {
           }
           for (const k of Object.keys(a)) if (!(k in b)) removed.push(k);
         }
-        send("diff", { prefix, added, removed, changed });
+        send("diff", { prefix: afterPrefix, added, removed, changed });
       } catch (e: any) {
         send("error", { message: e?.message ?? String(e) });
       } finally {

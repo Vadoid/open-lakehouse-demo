@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cache } from "@/lib/cache";
+import { resetPrefixCache } from "@/lib/lakekeeper";
 const LK_URL = process.env.LAKEKEEPER_URL ?? "http://lakekeeper:8181";
 const WAREHOUSE = process.env.LAKEKEEPER_WAREHOUSE ?? "demo";
 
@@ -211,6 +212,7 @@ export async function POST(req: NextRequest) {
     cache.storageConfig = { type, bucket, gcsKey, isCustomBucket };
     cache.runs = {}; // Reset completed steps so they run on new warehouse
     cache.lastSeenFiles = undefined;
+    resetPrefixCache(); // New warehouse → new UUID prefix; drop the stale memo
 
     return NextResponse.json({ success: true, prefix });
   } catch (e: any) {

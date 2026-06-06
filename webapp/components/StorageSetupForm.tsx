@@ -256,7 +256,7 @@ gcloud iam service-accounts keys create /dev/stdout --iam-account="${saName}@${p
                 </label>
                 {bypassOrgPolicy && (
                   <p className="text-[9px] text-amber-500/80 leading-normal pl-5 animate-in fade-in slide-in-from-top-1 duration-150">
-                    ℹ️ This wraps the script in `resource-manager` commands to temporarily disable the service account key constraint, download the key, and re-enable it immediately. Requires Project Owner or Org Policy Administrator privileges.
+                    ℹ️ This wraps the script in `resource-manager` commands to temporarily disable the service account key constraint, download the key, and re-enable it immediately. Requires Project Owner or Org Policy Administrator privileges. <strong className="text-amber-400">Note:</strong> Org Policy changes can take 3–5 minutes to propagate — if key creation fails, wait and re-run the script.
                   </p>
                 )}
               </div>
