@@ -60,6 +60,12 @@ readable, but I care more about a clear message than perfect prefixes. Say what
 changed and why. In the PR description, mention how you tested it: a clean
 `deploy.sh`, the step you ran, the VM or OS you were on.
 
+Use whatever tools help you, LLMs and AI coding assistants included. I do too.
+The only thing I ask is that you read your own PR before I do. Generated code is
+fine; unread generated code is not. If you can't explain what a hunk does or why
+it's there, it isn't ready. Keep the PR small enough to actually review, drop the
+filler the model adds, and make sure it runs.
+
 No CLA, no template to fill out. Be decent in the issue tracker and assume the
 other person is too.
 
