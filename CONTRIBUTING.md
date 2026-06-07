@@ -71,5 +71,5 @@ other person is too.
 
 ## License
 
-By contributing you agree your work is released under the [MIT License](LICENSE)
-that covers the rest of the repo.
+By contributing you agree your work is released under the
+[Apache License 2.0](LICENSE) that covers the rest of the repo.

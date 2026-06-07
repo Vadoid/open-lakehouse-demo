@@ -1,0 +1,17 @@
+Open Lakehouse with Iceberg V3 (demo)
+Copyright 2026 Vadim Zaripov
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This is a demonstration project. It runs, but does not redistribute, the
+following third-party software via Docker images and Maven artifacts pulled at
+build/run time. Each is governed by its own license:
+
+  - Apache Iceberg, Apache Spark      Apache License 2.0
+  - Lakekeeper (REST catalog)         Apache License 2.0
+  - PostgreSQL                        PostgreSQL License
+  - MinIO                             GNU AGPL v3.0
+
+Apache, Apache Iceberg, and Apache Spark are trademarks of the Apache Software
+Foundation. This project is not affiliated with, nor endorsed by, the Apache
+Software Foundation.

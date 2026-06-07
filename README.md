@@ -366,4 +366,11 @@ run it locally and what fits.
 
 ## License
 
-[MIT](LICENSE). Use it, fork it, teach with it.
+[Apache License 2.0](LICENSE). Use it, fork it, teach with it. See
+[NOTICE](NOTICE) for third-party attributions.
+
+## Trademarks
+
+Apache, Apache Iceberg, and Apache Spark are trademarks of the Apache Software
+Foundation. This project is not affiliated with or endorsed by the ASF; it just
+runs their software to show off what Iceberg V3 can do.
