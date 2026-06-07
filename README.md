@@ -357,3 +357,13 @@ Used to validate the comparison table above:
 - `apache/iceberg · format/spec.md` — <https://github.com/apache/iceberg/blob/main/format/spec.md>
 - Delta Lake protocol (current) — <https://github.com/delta-io/delta/blob/master/PROTOCOL.md>
 - Apache Iceberg releases (1.9 → 1.11) — <https://github.com/apache/iceberg/releases>
+
+## Contributing
+
+Patches welcome, especially fresh-VM bug fixes and new V3 demo steps. Open an
+issue before anything large. See [CONTRIBUTING.md](CONTRIBUTING.md) for how to
+run it locally and what fits.
+
+## License
+
+[MIT](LICENSE). Use it, fork it, teach with it.
