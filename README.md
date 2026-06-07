@@ -1,4 +1,4 @@
-# Open Lakehouse with Iceberg V3 — Lakekeeper, Spark, MinIO on Docker
+# Open Lakehouse with Iceberg V3: Lakekeeper, Spark, MinIO on Docker
 
 Tech demo of an open lakehouse on Apache Iceberg **format-version 3**. One
 `terraform apply` brings up six containers on a single Docker network. SQL is
@@ -9,9 +9,9 @@ and the Iceberg snapshot log per step.
 
 Storage is swappable. By default everything lands in MinIO, but the webapp's
 first-run setup screen can point the warehouse at Google Cloud Storage instead.
-The UI relabels itself for whichever target is active — the diagram, file tree,
+The UI relabels itself for whichever target is active. The diagram, file tree,
 lineage graph, and wrap-up all follow. See
-[Storage targets](#storage-targets--minio-or-gcs).
+[Storage targets](#storage-targets-minio-or-gcs).
 
 ## Architecture
 
@@ -72,15 +72,16 @@ Set `RUN_DEMO=1` to batch the whole `sql/demo.sql` through beeline instead.
 ```bash
 ./deploy.sh                          # bring up an empty stack (run steps in the webapp)
 RUN_DEMO=1 ./deploy.sh               # bring up + run all of demo.sql end-to-end
-./destroy.sh                         # tear down (local only — leaves any GCS bucket/SA)
+./destroy.sh                         # tear down (local only, leaves any GCS bucket/SA)
 CLEANUP_GCS=1 ./destroy.sh           # also delete the auto-created GCS bucket + service account
 ```
 
 `destroy.sh` is local-only by default: it removes the containers and network but
-leaves any auto-created GCS bucket and service account alone. That's deliberate —
-a teardown shouldn't quietly delete cloud resources, `gcloud` can stop to ask you
-to reauthenticate mid-script, and keeping the bucket lets the next deploy reuse it
-instead of re-minting the key and waiting out org-policy propagation. Set
+leaves any auto-created GCS bucket and service account alone. There are good
+reasons for that. A teardown shouldn't quietly delete cloud resources, `gcloud`
+can stop to ask you to reauthenticate mid-script, and keeping the bucket lets the
+next deploy reuse it instead of re-minting the key and waiting out org-policy
+propagation. Set
 `CLEANUP_GCS=1` when you actually want them gone; the script prints the manual
 `gcloud` commands either way.
 
@@ -108,8 +109,8 @@ shows the object-store file tree (MinIO or GCS, with added/changed/removed
 files colored per section), the Lakekeeper catalog, and the Iceberg snapshot
 timeline. Long INSERTs stream progress over SSE so the browser does not time
 out. Step results live in memory and reset when `demo-webapp` restarts; the
-storage config (and GCS key) persists to a volume, so it survives a restart —
-see [Storage targets](#storage-targets--minio-or-gcs).
+storage config (and GCS key) persists to a volume, so it survives a restart.
+See [Storage targets](#storage-targets-minio-or-gcs).
 
 ### Prereqs
 
@@ -117,7 +118,7 @@ see [Storage targets](#storage-targets--minio-or-gcs).
 - `terraform` >= 1.5
 - `curl` (for the bootstrap step)
 
-## Storage targets — MinIO or GCS
+## Storage targets: MinIO or GCS
 
 The stack ships with MinIO so it runs offline, but you can repoint the
 warehouse from the browser without a redeploy.
@@ -126,7 +127,7 @@ A setup screen (`SetupGuard`) gates the app until you pick a target. MinIO is
 the default and needs no config. For Google Cloud Storage you enter a project
 and bucket; the screen can also generate a Cloud Shell script that creates the
 bucket, makes a service account, and mints a key. If your org enforces
-`iam.disableServiceAccountKeyCreation`, tick the bypass box — it wraps the
+`iam.disableServiceAccountKeyCreation`, tick the bypass box. It wraps the
 script to drop the policy, mint the key, and turn the policy back on. Those
 policy changes take a few minutes to propagate, so if key creation fails the
 first time, just run it again.
@@ -135,18 +136,18 @@ Picking a target POSTs `/api/storage-setup`, which drops the old warehouse and
 re-registers it in Lakekeeper with the matching storage profile (`s3` for MinIO,
 `gcs` for GCS).
 
-GCS uses two separate credential paths. Spark never sees the SA key — it gets a
-downscoped `gcs.oauth2` token per table from Lakekeeper's load-table response,
-because `spark-defaults.conf` sets `io-impl = ResolvingFileIO` and sends the
+GCS uses two separate credential paths. Spark gets a downscoped `gcs.oauth2`
+token per table from Lakekeeper's load-table response, so the SA key never
+reaches it; `spark-defaults.conf` sets `io-impl = ResolvingFileIO` and sends the
 `X-Iceberg-Access-Delegation` header (`iceberg-gcp-bundle` is staged next to
-`iceberg-aws-bundle` in the Spark image). The webapp, on the other hand, reads
-the bucket directly with the SA key to draw the file tree and lineage graph.
+`iceberg-aws-bundle` in the Spark image). The webapp reads the bucket directly
+with the SA key to draw the file tree and lineage graph.
 
-The chosen config — SA key included — is written to a host-mounted volume
+The chosen config (SA key included) is written to a host-mounted volume
 (`.demo-state/ → /data` in the webapp container), so it outlives container
-restarts and recreations. This is the fix for an annoying bug: the config used
-to live only in memory, so every restart reset it to MinIO and quietly dropped a
-working GCS warehouse. `SetupGuard` now trusts the server config over the
+restarts and recreations. This fixes a bug where the config used to live only in
+memory, so every restart reset it to MinIO and quietly dropped a working GCS
+warehouse. `SetupGuard` now trusts the server config over the
 browser's `localStorage` flag and reconciles the two. `.demo-state/` is
 gitignored, since it holds a secret.
 
@@ -185,7 +186,7 @@ Each section is a page in the webapp and a block in `sql/demo.sql`.
 13. **Branches and tags + `.refs`.** Write-audit-publish via `branch_staging` + `CREATE TAG release-v1`. The `.refs` metadata view lists every branch and tag in one row.
 14. **Rollback + time travel + `.history`.** Tag a known-good snapshot, do a bad delete, `set_current_snapshot` to recover. The `.history` view walks the `parent_id` chain.
 15. **Sort orders + clustering.** Iceberg's three clustering levers: hidden partitioning (step 1), `WRITE ORDERED BY` table-level sort order (this step), and Z-order rewrite (step 17). After the sorted INSERT the latest snapshot's files show tight, non-overlapping `readable_metrics.symbol.{lower_bound,upper_bound}` vs the interleaved bounds on older files.
-16. **Perf + price payoff.** Build a flat sibling (no partition, no sort) and put it side-by-side with the partitioned + sorted table on the same predicate. Manifest-level pruning counts how many files a `WHERE symbol = 'NVDA'` query would touch — derived from per-file bounds, no scan needed.
+16. **Perf + price payoff.** Build a flat sibling (no partition, no sort) and put it side-by-side with the partitioned + sorted table on the same predicate. Manifest-level pruning counts how many files a `WHERE symbol = 'NVDA'` query would touch, derived from per-file bounds without scanning any data.
 17. **Maintenance jobs.** `rewrite_data_files` (bin-pack + Z-order syntax shown), `compute_table_stats` materializing Puffin theta sketches into `metadata.json.statistics[]` (the lineage graph picks up a fresh `stats-puffin` node), `rewrite_manifests`, `expire_snapshots`. The `.partitions` view summarizes record counts per partition tuple.
 18. **Wrap-up.** Live counters (snapshots, Puffin DVs vs positional deletes, MinIO objects), a V3 coverage matrix (what's wired vs deliberately skipped) and the production-hardening checklist.
 
@@ -228,28 +229,28 @@ Sources for the comparison are linked in the [footer](#sources).
 ## Caveats worth knowing
 
 - **Spark 3.5 + Iceberg 1.11** covers deletion vectors, row lineage, default
-  values, and maintenance. The newer V3 *types* — `VARIANT` and nanosecond
-  timestamps — need a **Spark 4.0** build and are intentionally left out of the
+  values, and maintenance. The newer V3 *types* (`VARIANT` and nanosecond
+  timestamps) need a **Spark 4.0** build and are intentionally left out of the
   core script. Bump `apache/spark` and the `iceberg-spark-runtime-4.0` package to
   add them.
-- Lakekeeper runs **unsecured** (`allow-all`, no IdP) — demo only. For anything
+- Lakekeeper runs **unsecured** (`allow-all`, no IdP); demo only. For anything
   real, wire an OIDC provider and OpenFGA.
 - Spark uses **static MinIO creds** for determinism in MinIO mode. GCS mode
   already vends credentials through Lakekeeper (`ResolvingFileIO` + the
-  `X-Iceberg-Access-Delegation` header), so no GCS key reaches Spark — for a
+  `X-Iceberg-Access-Delegation` header), so no GCS key reaches Spark. For a
   production MinIO/S3 deployment you'd drop the `s3.*` keys and vend those too.
-  One sharp edge: the refresh endpoint Lakekeeper hands back points at
+  One catch: the refresh endpoint Lakekeeper hands back points at
   `localhost:8181` (its `overrides.uri`), which is the wrong host inside the
   Spark container. Short writes use the initial token and are fine; a job that
   outlives the ~1 h token can't refresh. Set the Lakekeeper base URI to
   `http://lakekeeper:8181` if you run into it.
 - Pin versions: `lakekeeper_version` (default `v0.12.0`) and the Spark/Iceberg
   versions in `spark/spark-defaults.conf`. The Lakekeeper warehouse JSON shape is
-  version-sensitive — if `apply` fails at bootstrap, check the Storage guide for
+  version-sensitive. If `apply` fails at bootstrap, check the Storage guide for
   your Lakekeeper version.
-- Bootstrap (bucket + warehouse) is an imperative `local-exec` step, not pure
-  HCL — that's the normal split: Terraform for infra, a provisioner for catalog
-  init. Needs `docker` + `curl` on the host.
+- Bootstrap (bucket + warehouse) is an imperative `local-exec` step rather than
+  pure HCL. That's the normal split: Terraform for infra, a provisioner for
+  catalog init. Needs `docker` + `curl` on the host.
 
 ## Troubleshooting
 
@@ -288,7 +289,7 @@ passed-in name.
 ### `network with name lakedemo already exists`
 
 `apply` fails creating `docker_network.lake` because the network exists on the
-daemon but isn't in Terraform state — usually after a daemon/context switch or
+daemon but isn't in Terraform state, usually after a daemon/context switch or
 a wiped state file. Adopt it instead of recreating:
 
 ```bash
@@ -305,7 +306,7 @@ docker network rm lakedemo
 
 `deploy.sh` reconciles this automatically before `apply` (imports the orphan, or
 removes it if the import fails). The same class of error can hit container names
-(`container name already in use`) — clear them with the `docker rm -f` line above.
+(`container name already in use`); clear them with the `docker rm -f` line above.
 
 ### Webapp build hangs ~15 min, then `npm install` fails with `bad address`
 
