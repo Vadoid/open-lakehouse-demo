@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { stepById } from "@/lib/steps";
+import { stepById, CONSOLE_STEP } from "@/lib/steps";
 import { runScript } from "@/lib/thrift";
 import { listStorage } from "@/lib/storage";
 import { saveRun } from "@/lib/cache";
@@ -13,7 +13,9 @@ export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
-  const step = stepById(Number(body.stepId));
+  // stepId 0 is the free-form console — no demo step backs it, so use the
+  // synthetic CONSOLE_STEP (runs body.sql against the warehouse root).
+  const step = Number(body.stepId) === 0 ? CONSOLE_STEP : stepById(Number(body.stepId));
   if (!step) return new Response("unknown step", { status: 400 });
 
   const customSql = typeof body.sql === "string" ? body.sql : null;

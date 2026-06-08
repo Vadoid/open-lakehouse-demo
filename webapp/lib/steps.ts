@@ -19,6 +19,9 @@ export type Step = {
   // When true, step page renders the wrap-up template instead of the
   // SQL/why/under-hood three-pane layout.
   wrapup?: boolean;
+  // When true, this is an optional "bonus" step (the Flink streaming interop) —
+  // it sits after the wrap-up and StepRail draws a separator before it.
+  bonus?: boolean;
 };
 
 // SQL + title strings carry placeholders:
@@ -670,6 +673,7 @@ ORDER BY record_count DESC LIMIT 10;`,
   },
   {
     id: 19,
+    bonus: true,
     title: "Multi-engine streaming (Flink)",
     why: `**Bonus — optional Flink streaming engine.** Everything up to here ran on **Spark** (batch). This step shows a *second* engine, **Apache Flink**, writing into the **same Iceberg catalog** Spark reads — multi-engine interop on one source of truth.
 
@@ -697,3 +701,17 @@ SELECT count(*) AS row_count FROM demo.market.trades_stream;`,
 ];
 
 export const stepById = (n: number): Step | undefined => STEPS.find((s) => s.id === n);
+
+// Synthetic step for the free-form /console page: id 0, empty SQL, no inspect
+// (so prefix resolution falls back to the warehouse root). Lets the real
+// SqlPanel — syntax highlighting, copy, line numbers, selection-run, SSE — drive
+// arbitrary SQL without a dedicated console component. /api/run accepts id 0 by
+// substituting this step.
+export const CONSOLE_STEP: Step = {
+  id: 0,
+  title: "SQL Console",
+  why: "",
+  sql: "",
+  expect: "",
+  inspect: {},
+};

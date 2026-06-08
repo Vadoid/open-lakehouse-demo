@@ -73,8 +73,18 @@ CREATE TEMPORARY TABLE src (
   ts AS CAST(LOCALTIMESTAMP AS TIMESTAMP(6))
 ) WITH (
   'connector'='datagen',
-  'rows-per-second'='50',     -- throughput knob: raise to stress, lower to slow the climb
-  'fields.symbol.length'='4'  -- 4-char random tickers
+  'rows-per-second'='50',           -- throughput knob: raise to stress, lower to slow the climb
+  'fields.symbol.length'='4',       -- 4-char random tickers
+  -- Bound the numeric fields. Without min/max, datagen fills each numeric across
+  -- its ENTIRE type range — prices near 1e308, negative billion quantities — so
+  -- aggregates overflow to null and the data looks nonsensical. Constrain to
+  -- believable trade values.
+  'fields.trade_id.min'='1',
+  'fields.trade_id.max'='1000000',
+  'fields.price.min'='10.0',
+  'fields.price.max'='1000.0',
+  'fields.qty.min'='1',
+  'fields.qty.max'='1000'
 );
 
 -- The long-running streaming INSERT. sql-client submits this to the session
