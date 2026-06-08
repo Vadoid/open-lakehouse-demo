@@ -42,7 +42,7 @@ select_engine() {
 ================================================================
   Engine selection
 ================================================================
-  Spark Thrift Server is ALWAYS started — it runs the full V3
+  Spark Thrift Server is ALWAYS started. It runs the full V3
   demo (sql/demo.sql): MERGE/CDC, branches, time travel, deletion
   vectors, maintenance. This is the primary engine.
 
@@ -55,8 +55,8 @@ select_engine() {
     • commits on each checkpoint (~10s)
 
   ...while Spark/beeline queries the SAME table and watches the
-  row count climb. This demonstrates multi-engine interop on one
-  Iceberg catalog — two engines, one source of truth.
+  row count climb. That is multi-engine interop on one Iceberg
+  catalog: two engines, one source of truth.
 
   Cost: +2 containers (jobmanager, taskmanager), ~3-4 GiB extra
   RAM. Flink is ON by default; opt out on a host with <12 GiB free.
@@ -409,13 +409,13 @@ verify_flink_stream() {
 
   cat <<'INTEROP'
 
-   Flink cluster is up and idle — the streaming job is NOT running yet.
+   Flink cluster is up and idle. The streaming job is NOT running yet.
    Start it from the webapp bonus step (Multi-engine streaming / step 19):
    click "Start streaming" on the live tile. The jobmanager supervisor then
    submits a continuous datagen -> Iceberg job into the SAME catalog Spark uses.
 
-   Once started, watch multi-engine interop — run this twice, ~10s apart, and
-   the count climbs (Flink writing, Spark reading, one catalog):
+   Once started, run this twice, ~10s apart, and the count climbs
+   (Flink writing, Spark reading, one catalog):
 
      docker exec spark-thrift /opt/spark/bin/beeline \
        -u jdbc:hive2://localhost:10000 \

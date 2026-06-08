@@ -114,21 +114,20 @@ Endpoints: **Webapp `:3030`**, Lakekeeper UI `:8181/ui/`, MinIO console `:9001`,
 
 ## Flink streaming engine (on by default)
 
-Spark Thrift is the primary engine and runs the whole V3 batch demo. The stack
-**also** runs **Apache Flink 1.20** by default — a second engine that *streams*
-rows into the same Iceberg catalog while Spark queries them — real multi-engine
-interop on one source of truth. (Opt out to a Spark-only stack at the deploy
-menu, or with `ENABLE_FLINK=0` / `-var enable_flink=false`.)
+Spark Thrift is the primary engine and runs the whole V3 batch demo. By default
+the stack **also** runs **Apache Flink 1.20**: a second engine that streams rows
+into the same Iceberg catalog while Spark queries them. Two engines, one catalog.
+(Opt out to a Spark-only stack at the deploy menu, or with `ENABLE_FLINK=0` /
+`-var enable_flink=false`.)
 
 ### What Flink does here
 
-Flink runs one continuous job: a built-in `datagen` source fabricates synthetic
+Flink runs one continuous job. A built-in `datagen` source fabricates synthetic
 trades and an Iceberg sink appends them to `demo.market.trades_stream`. The sink
-commits a new Iceberg snapshot **on every checkpoint** (~10s), so the table grows
-in visible bursts. Nothing external is involved — it is self-contained, like the
-rest of the demo. Spark's role is unchanged: batch DDL/DML, MERGE/CDC, time
-travel, maintenance. Flink's role is the thing Spark's batch demo can't show —
-a long-running append stream.
+commits a new Iceberg snapshot on every checkpoint (~10s), so the table grows in
+visible bursts. It is self-contained, like the rest of the demo. Spark still does
+what it always did: batch DDL/DML, MERGE/CDC, time travel, maintenance. Flink adds
+the one thing batch can't show, a long-running append stream.
 
 The stream emits the **same eight tickers** (`AAPL, MSFT, NVDA, …`) the batch
 table `trades_v3` uses in step 1, so step 19 includes a **temporal join** that
@@ -152,8 +151,8 @@ Spark's `CREATE TABLE ... TBLPROPERTIES` DDL — none of which exist in Flink SQ
 (different `CREATE CATALOG ... WITH (...)` syntax, no `MERGE`, no `range()`,
 different maintenance). A Flink-*replacement* mode would force a thinner
 Flink-only demo and drop roughly half the V3 features. So Flink is purely
-additive: **zero loss** of Spark coverage, plus a streaming-interop story.
-Please don't "fix" this back into a toggle.
+additive: Spark coverage stays complete, and you also get the streaming-interop
+story. Please don't "fix" this back into a toggle.
 
 ### The interop story
 
@@ -168,8 +167,8 @@ docker exec spark-thrift /opt/spark/bin/beeline \
   -e "SELECT count(*) FROM demo.market.trades_stream;"
 ```
 
-The count strictly increases between runs: Flink is committing, Spark is reading,
-neither knows about the other — they only share the catalog.
+The count strictly increases between runs. Flink commits, Spark reads, and
+neither knows about the other; they only share the catalog.
 
 ### How to choose it
 
@@ -216,11 +215,11 @@ neither knows about the other — they only share the catalog.
 Like Spark, Flink now mirrors the storage-agnostic path: `io-impl` is
 `ResolvingFileIO` (dispatches `s3://` to MinIO, `gs://` to GCS) and it requests
 Lakekeeper's **vended credentials** via `rest.access-delegation`, so no static
-GCS key ever reaches the container. Because the webapp can switch the storage
-target (MinIO ↔ GCS) at runtime — which DROPs and re-registers the warehouse and
-kills the running INSERT — the jobmanager container runs a small **resubmit
-supervisor** that reruns the idempotent `stream.sql` whenever no job is live. The
-stream self-heals against whatever warehouse is currently registered. (Full GCS
+GCS key ever reaches the container. The webapp can switch the storage target
+(MinIO ↔ GCS) at runtime, which DROPs and re-registers the warehouse and kills the
+running INSERT. To survive that, the jobmanager container runs a small **resubmit
+supervisor** that reruns the idempotent `stream.sql` whenever no job is live, so
+the stream self-heals against whatever warehouse is currently registered. (Full GCS
 behavior needs a real GCS deploy to verify; the MinIO path and the kill/resubmit
 recovery are verifiable locally.)
 
