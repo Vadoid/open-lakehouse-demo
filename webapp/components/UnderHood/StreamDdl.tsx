@@ -1,5 +1,7 @@
 "use client";
 
+import { highlight } from "@/lib/sqlHighlight";
+
 // Read-only view of the Flink SQL behind step 19. The streaming table is created
 // and written by the Flink job itself (the jobmanager supervisor runs
 // flink/sql/stream.sql) — this panel just makes that DDL visible so you can see
@@ -46,7 +48,7 @@ INSERT INTO demo.market.trades_stream
 
 export default function StreamDdl() {
   return (
-    <details className="rounded-xl border border-ink-700 bg-ink-800/60 shadow-sm group" open>
+    <details className="rounded-xl border border-ink-700 bg-ink-800/60 shadow-sm group">
       <summary className="cursor-pointer select-none list-none px-4 py-2.5 flex items-center justify-between">
         <span className="text-[11px] font-bold uppercase tracking-wider text-gray-400">
           Streaming table &amp; job · Flink SQL
@@ -55,9 +57,10 @@ export default function StreamDdl() {
         <span className="text-[10px] text-gray-600 hidden group-open:inline">hide</span>
       </summary>
       <div className="px-4 pb-3">
-        <pre className="rounded-lg bg-ink-900/70 border border-ink-700 p-3 text-[11px] leading-relaxed text-gray-300 overflow-x-auto">
-          {DDL}
-        </pre>
+        <pre
+          className="rounded-lg bg-ink-900/70 border border-ink-700 p-3 text-[11px] leading-relaxed text-gray-300 overflow-x-auto font-mono"
+          dangerouslySetInnerHTML={{ __html: highlight(DDL) }}
+        />
         <p className="mt-2 text-[11px] text-gray-500 leading-snug">
           Read-only. The Flink jobmanager runs this itself when you press{" "}
           <strong>Start streaming</strong> above; it's Flink SQL, so it won't run in

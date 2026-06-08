@@ -9,6 +9,7 @@ import {
   subscribeConfig,
 } from "@/lib/demoConfig";
 import DemoConfigPanel from "@/components/DemoConfigPanel";
+import { highlight } from "@/lib/sqlHighlight";
 
 type EventMsg =
   | { kind: "hello"; stepId: number; title: string; prefix: string }
@@ -19,7 +20,6 @@ type EventMsg =
   | { kind: "error"; message: string }
   | { kind: "diff"; prefix: string; added: string[]; removed: string[]; changed: string[] };
 
-const KEYWORDS = /\b(SELECT|FROM|WHERE|GROUP BY|ORDER BY|LIMIT|INSERT INTO|UPDATE|DELETE|CREATE|DROP|TABLE|NAMESPACE|IF NOT EXISTS|IF EXISTS|USING|PARTITIONED BY|TBLPROPERTIES|ALTER|ADD COLUMN|AS|CALL|SET|AND|OR|UNION ALL|UNION|CAST|CASE|WHEN|THEN|ELSE|END|TIMESTAMP|BIGINT|STRING|DOUBLE|INT|BOOLEAN)\b/g;
 // Format a result cell. Spark structs (e.g. partition column of `.partitions`
 // view) come back as plain objects; native String() yields "[object Object]".
 // Decode Iceberg day/hour partition transforms to ISO so the cell is readable.
@@ -38,15 +38,6 @@ function fmtCell(v: any): string {
     return parts.length ? `{${parts.join(", ")}}` : "{}";
   }
   return String(v);
-}
-
-function highlight(sql: string) {
-  return sql
-    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-    .replace(/--.*$/gm, (m) => `<span class="sql-comment">${m}</span>`)
-    .replace(/'([^']*)'/g, `<span class="sql-string">'$1'</span>`)
-    .replace(/\b(\d+(?:\.\d+)?)\b/g, `<span class="sql-number">$1</span>`)
-    .replace(KEYWORDS, `<span class="sql-keyword">$1</span>`);
 }
 
 export default function SqlPanel({ step }: { step: Step }) {
