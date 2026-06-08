@@ -6,6 +6,16 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    ignore:
+      # Major bumps that need a manual migration, not a drive-by PR:
+      #  - typescript 6 tightens CSS side-effect imports (globals.css) → tsc fails.
+      #  - tailwindcss 4 is a config-format rewrite; CI (typecheck+vitest) doesn't
+      #    exercise styles, so a green check here would be misleading.
+      # Patch/minor on both still flow.
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
+      - dependency-name: tailwindcss
+        update-types: ["version-update:semver-major"]
     groups:
       # Fold minor + patch bumps into a single PR to cut review noise; majors
       # still come through as their own PRs so breaking changes stay visible.
