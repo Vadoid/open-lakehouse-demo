@@ -12,7 +12,7 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.682.0",
+    "@aws-sdk/client-s3": "^3.1063.0",
     "@google-cloud/storage": "^7.19.0",
     "avsc": "^5.7.7",
     "hive-driver": "^1.0.1",
