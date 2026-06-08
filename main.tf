@@ -214,7 +214,7 @@ resource "docker_container" "spark_thrift" {
     EOT
     ,
   ]
-  restart  = "unless-stopped"
+  restart = "unless-stopped"
   healthcheck {
     test         = ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/10000' 2>/dev/null"]
     interval     = "15s"
@@ -273,10 +273,10 @@ locals {
 }
 
 resource "docker_container" "flink_jobmanager" {
-  count      = var.enable_flink ? 1 : 0
-  name       = "flink-jobmanager"
-  image      = docker_image.flink[0].image_id
-  user       = "root"
+  count = var.enable_flink ? 1 : 0
+  name  = "flink-jobmanager"
+  image = docker_image.flink[0].image_id
+  user  = "root"
   # Catalog must exist before the stream job points at it — same gate as Spark.
   depends_on = [null_resource.bootstrap]
   networks_advanced { name = docker_network.lake.name }
@@ -415,10 +415,10 @@ resource "docker_container" "flink_jobmanager" {
 }
 
 resource "docker_container" "flink_taskmanager" {
-  count      = var.enable_flink ? 1 : 0
-  name       = "flink-taskmanager"
-  image      = docker_image.flink[0].image_id
-  user       = "root"
+  count = var.enable_flink ? 1 : 0
+  name  = "flink-taskmanager"
+  image = docker_image.flink[0].image_id
+  user  = "root"
   # Needs the jobmanager up to register; the bootstrap gate keeps ordering sane.
   depends_on = [docker_container.flink_jobmanager]
   networks_advanced { name = docker_network.lake.name }
@@ -441,7 +441,7 @@ resource "docker_container" "flink_taskmanager" {
 # Rebuilds when anything under webapp/ changes (src_hash trigger).
 # ----------------------------------------------------------------------------
 locals {
-  webapp_all      = fileset("${path.module}/webapp", "**")
+  webapp_all = fileset("${path.module}/webapp", "**")
   webapp_excluded = setunion(
     fileset("${path.module}/webapp", "node_modules/**"),
     fileset("${path.module}/webapp", ".next/**"),

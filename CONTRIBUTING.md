@@ -69,6 +69,49 @@ filler the model adds, and make sure it runs.
 No CLA, no template to fill out. Be decent in the issue tracker and assume the
 other person is too.
 
+## Continuous integration
+
+Every PR and every push to `main` runs `.github/workflows/ci.yml`, three
+parallel jobs:
+
+- **`webapp`** — `npm ci`, `tsc --noEmit` (typecheck), and the Vitest unit
+  suite with coverage (`webapp/lib/__tests__/`). Run it locally with
+  `cd webapp && npm install --legacy-peer-deps && npm run test:coverage` and
+  `npm run typecheck`.
+- **`shell`** — `shellcheck` over `deploy.sh`, `destroy.sh`,
+  `scripts/bootstrap.sh`.
+- **`terraform`** — `terraform fmt -check -recursive`, then
+  `init -backend=false` + `validate`. If `fmt` fails, run `terraform fmt` and
+  commit the result.
+
+The tests are deliberately scoped to the pure helpers in `webapp/lib/`
+(formatting, config persistence, SQL highlighting, the step table, the file
+diff). The I/O-bound glue — Thrift, Lakekeeper, S3/GCS, API routes, React
+components — is integration territory and isn't unit-tested here, so don't be
+surprised that coverage is reported only for the scoped files.
+
+## Automerge / branch protection
+
+The three CI job names — **`webapp`**, **`shell`**, **`terraform`** — are the
+stable required status checks. To turn on GitHub-native auto-merge:
+
+1. **Settings → General → Pull Requests** → tick *Allow auto-merge*.
+2. **Settings → Branches** → add a branch-protection rule on `main`:
+   - *Require status checks to pass before merging* → add `webapp`, `shell`,
+     `terraform`.
+   - *Require branches to be up to date before merging* (optional but tidy).
+   - Leave **Require approvals at `0`**. The gate here is the required *status
+     checks*, not human approvals. If you require approvals, dependabot's
+     auto-merge stalls — dependabot can't approve its own PR, and a
+     `GITHUB_TOKEN` approval doesn't satisfy the rule.
+3. On a green PR, run `gh pr merge --auto` (or click *Enable auto-merge*). The
+   PR merges itself once all three checks pass.
+
+Dependabot PRs are handled automatically by
+`.github/workflows/dependabot-automerge.yml`: it enables auto-merge on
+`patch`/`minor` bumps (majors are left for a human). The merge still waits on
+the required checks above, so a red CI blocks it.
+
 ## License
 
 By contributing you agree your work is released under the

@@ -6,7 +6,7 @@ set -euo pipefail
 LK="http://localhost:8181"
 
 echo ">> waiting for Lakekeeper to be healthy..."
-for i in $(seq 1 60); do
+for _ in $(seq 1 60); do
   if curl -sf "${LK}/health" >/dev/null 2>&1; then break; fi
   sleep 2
 done

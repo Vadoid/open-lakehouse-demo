@@ -1,5 +1,8 @@
 # Open Lakehouse with Iceberg V3: Lakekeeper, Spark, MinIO on Docker
 
+[![CI](https://github.com/Vadoid/open-lakehouse-demo/actions/workflows/ci.yml/badge.svg)](https://github.com/Vadoid/open-lakehouse-demo/actions/workflows/ci.yml)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+
 Tech demo of an open lakehouse on Apache Iceberg **format-version 3**. One
 `terraform apply` brings up six containers on a single Docker network. SQL is
 driven through the Spark Thrift Server (HiveServer2 wire protocol on `:10000`),

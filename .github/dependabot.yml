@@ -1,0 +1,37 @@
+version: 2
+updates:
+  # Webapp npm dependencies (Next.js app).
+  - package-ecosystem: npm
+    directory: /webapp
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      # Fold minor + patch bumps into a single PR to cut review noise; majors
+      # still come through as their own PRs so breaking changes stay visible.
+      npm-minor-patch:
+        update-types:
+          - minor
+          - patch
+
+  # GitHub Actions used by the workflows in .github/workflows/.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions-minor-patch:
+        update-types:
+          - minor
+          - patch
+
+  # Terraform providers / modules pinned in the repo root.
+  - package-ecosystem: terraform
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      terraform-minor-patch:
+        update-types:
+          - minor
+          - patch

@@ -42,6 +42,7 @@ webapp/out/
 webapp/.turbo/
 webapp/next-env.d.ts
 webapp/tsconfig.tsbuildinfo
+webapp/coverage/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

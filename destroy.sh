@@ -8,7 +8,7 @@
 # we can find, so the box is actually clean.
 set -uo pipefail   # intentionally NOT -e: cleanup is best-effort, keep going
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit 1
 
 # flink-* are present only when deployed with the optional Flink engine; listing
 # them here is harmless when absent (sweep skips containers it can't inspect).
