@@ -5,6 +5,74 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
+# ENABLE_FLINK drives whether the optional Flink streaming engine comes up.
+# Default off. The documented, primary way to turn it on is the interactive
+# engine menu (select_engine, below). ENABLE_FLINK=1 in the environment is a
+# silent non-interactive escape hatch (CI / scripted runs) that skips the menu.
+ENABLE_FLINK="${ENABLE_FLINK:-0}"
+
+# ---------------------------------------------------------------------------
+# 0. Engine selection (interactive).
+#
+# Spark Thrift ALWAYS runs — it is the primary engine and executes the full V3
+# batch demo (sql/demo.sql): MERGE/CDC, branches, time travel, deletion vectors,
+# maintenance. Flink CANNOT run that script (Flink SQL has no MERGE INTO, no
+# range() TVF, different catalog DDL and maintenance procedures), so we do NOT
+# offer it as a Spark replacement. Instead Flink is purely ADDITIVE: a second
+# engine on the SAME Lakekeeper catalog + MinIO bucket that runs a continuous
+# datagen -> Iceberg streaming job, appending to demo.market.trades_stream and
+# committing on each checkpoint (~10s) while Spark/beeline reads the same table
+# and watches the count climb. That is the multi-engine interop story.
+#
+# TTY-aware: if stdin is not a terminal (CI, piped input), skip the prompt and
+# keep the Spark-only default — unless ENABLE_FLINK=1 was passed explicitly.
+# ---------------------------------------------------------------------------
+select_engine() {
+  if [ "${ENABLE_FLINK}" = "1" ]; then
+    echo ">> ENABLE_FLINK=1 — Spark + Flink streaming engine (menu skipped)"
+    return
+  fi
+  if [ ! -t 0 ]; then
+    echo ">> non-interactive stdin — defaulting to Spark only (set ENABLE_FLINK=1 to add Flink)"
+    return
+  fi
+
+  cat <<'MENU'
+================================================================
+  Engine selection
+================================================================
+  Spark Thrift Server is ALWAYS started — it runs the full V3
+  demo (sql/demo.sql): MERGE/CDC, branches, time travel, deletion
+  vectors, maintenance. This is the primary engine.
+
+  You can ALSO add Apache Flink as a second, streaming engine on
+  the SAME Lakekeeper catalog + MinIO bucket. Flink does NOT
+  replace Spark and does NOT re-run the batch demo. Instead it:
+
+    • runs a continuous streaming job (datagen -> Iceberg sink)
+    • appends rows every second to demo.market.trades_stream
+    • commits on each checkpoint (~10s)
+
+  ...while Spark/beeline queries the SAME table and watches the
+  row count climb. This demonstrates multi-engine interop on one
+  Iceberg catalog — two engines, one source of truth.
+
+  Cost: +2 containers (jobmanager, taskmanager), ~3-4 GiB extra
+  RAM. Recommended on a host with >12 GiB free.
+================================================================
+
+  1) Spark only            (default)
+  2) Spark + Flink streaming
+
+MENU
+  local choice
+  read -r -p "  Pick [1/2]: " choice || true
+  case "${choice}" in
+    2) ENABLE_FLINK=1; echo ">> selected: Spark + Flink streaming" ;;
+    *) ENABLE_FLINK=0; echo ">> selected: Spark only" ;;
+  esac
+}
+
 # ---------------------------------------------------------------------------
 # 1. Docker daemon
 # ---------------------------------------------------------------------------
@@ -267,8 +335,12 @@ run_terraform() {
     terraform init -input=false
   fi
   reconcile_orphan_network
-  echo ">> terraform apply"
-  terraform apply -auto-approve -input=false
+  echo ">> terraform apply (enable_flink=$([ "${ENABLE_FLINK}" = "1" ] && echo true || echo false))"
+  # Map the engine choice to the Terraform bool. Flink resources are count-gated
+  # on enable_flink, so false => zero Flink containers, byte-for-byte the
+  # original Spark-only stack.
+  terraform apply -auto-approve -input=false \
+    -var "enable_flink=$([ "${ENABLE_FLINK}" = "1" ] && echo true || echo false)"
 }
 
 # ---------------------------------------------------------------------------
@@ -291,6 +363,97 @@ wait_for_thrift() {
 }
 
 # ---------------------------------------------------------------------------
+# 3b. Wait for the Flink session cluster (gated on ENABLE_FLINK).
+# First start pulls the flink:1.20 image and curls the Iceberg + Hadoop jars
+# into /opt/flink/lib, so the taskmanager takes a bit to register. Poll the
+# jobmanager REST /overview until at least one taskmanager has joined — mirrors
+# wait_for_thrift's retry loop.
+# ---------------------------------------------------------------------------
+wait_for_flink() {
+  [ "${ENABLE_FLINK}" = "1" ] || return 0
+  echo -n ">> waiting for Flink cluster on :8081 (image pull + jar staging on first run)"
+  for _ in $(seq 1 100); do
+    # /overview returns {"taskmanagers":N,...}; N>=1 means the TM registered.
+    if curl -s localhost:8081/overview 2>/dev/null | grep -q '"taskmanagers":[1-9]'; then
+      echo " — ready"
+      return
+    fi
+    echo -n "."
+    sleep 3
+  done
+  echo
+  echo "!! Flink cluster did not become ready within 5 min. Check: docker logs flink-jobmanager"
+  exit 1
+}
+
+# ---------------------------------------------------------------------------
+# 3c. Submit the streaming job (gated on ENABLE_FLINK).
+#
+# Runs flink/sql/stream.sql through the embedded SQL client — same docker-exec
+# pattern as beeline for Spark, no separate SQL Gateway container needed. The
+# script creates the shared REST catalog, the trades_stream sink table, a
+# datagen source, and a long-running INSERT. sql-client submits the streaming
+# INSERT and RETURNS (table.dml-sync defaults to false), leaving the job running
+# on the session cluster — commits happen on each checkpoint (~10s).
+# ---------------------------------------------------------------------------
+start_flink_stream() {
+  [ "${ENABLE_FLINK}" = "1" ] || return 0
+  echo ">> submitting Flink streaming job (datagen -> demo.market.trades_stream)"
+  docker exec flink-jobmanager /opt/flink/bin/sql-client.sh -f /opt/flink/sql/stream.sql \
+    || { echo "!! Flink job submission failed. Check: docker logs flink-jobmanager"; exit 1; }
+
+  # IMPORTANT: sql-client.sh -f returns exit 0 EVEN WHEN a statement fails (it
+  # prints [ERROR] and exits clean), so the `||` guard above is necessary-but-
+  # not-sufficient — it catches a non-running client, not a job that submits and
+  # then dies. And "submitted" != "writing": the Iceberg sink makes rows visible
+  # only on a COMPLETED checkpoint, and a misconfigured job loops in RESTARTING,
+  # committing nothing. So verify the real signal: the job reached >=1 completed
+  # checkpoint. This mirrors wait_for_thrift — prove the engine actually works,
+  # don't just assume the container is up.
+  echo -n ">> confirming the stream commits (waiting for first Flink checkpoint)"
+  local jid="" ok=0
+  for _ in $(seq 1 40); do
+    # First RUNNING job's id, then its completed-checkpoint count, via the REST
+    # API (python3 is already a hard dep — bootstrap.sh relies on it).
+    jid=$(curl -s localhost:8081/jobs/overview 2>/dev/null \
+      | python3 -c 'import sys,json
+try:
+  js=[j for j in json.load(sys.stdin)["jobs"] if j["state"]=="RUNNING"]
+  print(js[0]["jid"] if js else "")
+except Exception: print("")' 2>/dev/null)
+    if [ -n "${jid}" ]; then
+      if curl -s "localhost:8081/jobs/${jid}/checkpoints" 2>/dev/null \
+          | grep -qE '"completed":[1-9]'; then
+        ok=1; break
+      fi
+    fi
+    echo -n "."
+    sleep 3
+  done
+  if [ "${ok}" != "1" ]; then
+    echo
+    echo "!! Flink job did not reach a completed checkpoint. It likely submitted"
+    echo "   then failed (RESTARTING loop) — zero rows will be committed."
+    echo "   Check: docker logs flink-taskmanager ; http://localhost:8081"
+    exit 1
+  fi
+  echo " — committing"
+
+  cat <<'INTEROP'
+
+   Flink is now streaming into the SAME Iceberg catalog Spark uses.
+   Watch multi-engine interop — run this twice, ~10s apart, and the
+   count climbs (Flink writing, Spark reading, one catalog):
+
+     docker exec spark-thrift /opt/spark/bin/beeline \
+       -u jdbc:hive2://localhost:10000 \
+       -e "SELECT count(*) FROM demo.market.trades_stream;"
+
+   Flink web UI (the running INSERT job): http://localhost:8081
+INTEROP
+}
+
+# ---------------------------------------------------------------------------
 # 4. Run demo SQL (opt-in only).
 # The stack comes up EMPTY by default so the webapp clickthrough starts from a
 # blank catalog and the user runs each step themselves. Set RUN_DEMO=1 to batch
@@ -307,12 +470,15 @@ run_demo() {
     -u jdbc:hive2://localhost:10000 -f /opt/demo/demo.sql
 }
 
+select_engine
 ensure_docker
 align_docker_host
 ensure_container_internet
 run_terraform
 wait_for_thrift
 run_demo
+wait_for_flink
+start_flink_stream
 
 echo
 echo "Stack is up. Endpoints:"

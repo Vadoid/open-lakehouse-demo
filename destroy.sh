@@ -10,7 +10,9 @@ set -uo pipefail   # intentionally NOT -e: cleanup is best-effort, keep going
 
 cd "$(dirname "$0")"
 
-CONTAINERS=(lake-postgres lake-minio lakekeeper lake-migrate spark-thrift demo-webapp)
+# flink-* are present only when deployed with the optional Flink engine; listing
+# them here is harmless when absent (sweep skips containers it can't inspect).
+CONTAINERS=(lake-postgres lake-minio lakekeeper lake-migrate spark-thrift demo-webapp flink-jobmanager flink-taskmanager)
 NETWORK=lakedemo
 
 # ---------------------------------------------------------------------------
@@ -148,4 +150,4 @@ if [ -n "${GCS_BUCKET}" ] || [ -n "${SA_EMAIL}" ]; then
 fi
 
 echo
-echo "Teardown complete. Verify with: docker ps -a | grep -E 'lake|spark|webapp'"
+echo "Teardown complete. Verify with: docker ps -a | grep -E 'lake|spark|webapp|flink'"

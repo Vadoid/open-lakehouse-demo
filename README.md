@@ -19,35 +19,47 @@ lineage graph, and wrap-up all follow. See
 flowchart TB
     user(("host&nbsp;:3030"))
     web["<b>demo-webapp</b><br/>Next.js&nbsp;15 · React&nbsp;18<br/><i>server routes do all I/O</i>"]
-    spark["<b>Spark&nbsp;Thrift&nbsp;Server</b><br/>HiveServer2&nbsp;wire<br/>apache/spark&nbsp;3.5.6<br/>iceberg-spark-runtime&nbsp;1.11.0"]
+    spark["<b>Spark&nbsp;Thrift&nbsp;Server</b><br/>HiveServer2&nbsp;wire<br/>apache/spark&nbsp;3.5.6<br/>iceberg-spark-runtime&nbsp;1.11.0<br/><i>batch — full V3 demo</i>"]
+    flink["<b>Flink&nbsp;1.20</b> <i>(optional)</i><br/>jobmanager + taskmanager<br/>iceberg-flink-runtime&nbsp;1.11.0<br/><i>streaming — datagen → Iceberg</i>"]
     lk["<b>Lakekeeper</b><br/>Iceberg&nbsp;REST&nbsp;catalog (Rust)<br/>v0.12.0 · authz: allow-all"]
     minio["<b>Object store</b><br/>MinIO (local) <i>or</i> GCS<br/>Parquet + Puffin"]
     pg["<b>Postgres&nbsp;15</b><br/>Lakekeeper metadata<br/><i>internal</i>"]
 
     user --> web
+    user -. ":8081 web UI" .-> flink
     web -- "JDBC :10000" --> spark
     web -- "REST :8181" --> lk
     web -- "S3 :9000 / GCS API" --> minio
     spark <-- "REST catalog" --> lk
+    flink <-. "REST catalog" .-> lk
     lk -. "SQL · 5432" .-> pg
     spark -- "S3FileIO / GCSFileIO" --> minio
+    flink -. "S3FileIO" .-> minio
 
     classDef web fill:#1e2a44,stroke:#7c8cc6,color:#dbe5ff
     classDef compute fill:#311e44,stroke:#a17ec6,color:#e9d8ff
     classDef catalog fill:#0f3340,stroke:#5fc4d3,color:#d6f4fa
     classDef storage fill:#3d2415,stroke:#d99868,color:#fbe2cf
     classDef hostnode fill:#1e293b,stroke:#475569,color:#cbd5e1
+    classDef optional fill:#1a3326,stroke:#5fb98a,color:#d6fae5
     class user hostnode
     class web web
     class spark compute
+    class flink optional
     class lk,pg catalog
     class minio storage
 ```
 
-Six containers on the `lakedemo` Docker network. Postgres holds Lakekeeper's
-metadata; MinIO holds Iceberg's data and metadata files; Lakekeeper hands
-out object-store paths and table snapshots; Spark Thrift executes the SQL; the
-webapp is a thin server that talks to all three at once.
+Six containers on the `lakedemo` Docker network (Postgres, MinIO, Lakekeeper,
+Spark Thrift, the webapp, plus the one-shot Lakekeeper migrate job). Postgres
+holds Lakekeeper's metadata; MinIO holds Iceberg's data and metadata files;
+Lakekeeper hands out object-store paths and table snapshots; Spark Thrift
+executes the SQL; the webapp is a thin server that talks to all three at once.
+
+Two more containers — **Flink jobmanager + taskmanager** (dashed above) — join
+only when you opt into the streaming engine at deploy time. They read and write
+the *same* Lakekeeper catalog and MinIO bucket as Spark. See
+[Optional: Flink streaming engine](#optional-flink-streaming-engine).
 
 In GCS mode a Google Cloud Storage bucket takes MinIO's place. Spark writes
 `gs://` paths through `GCSFileIO` (Iceberg's `ResolvingFileIO` picks the right
@@ -98,7 +110,108 @@ Docker daemon must already be running for the manual path. First Spark start
 downloads the Iceberg jars from Maven (needs internet); give it a minute or two
 before the Thrift Server accepts connections.
 
-Endpoints: **Webapp `:3030`**, Lakekeeper UI `:8181/ui/`, MinIO console `:9001`, Thrift JDBC `:10000`.
+Endpoints: **Webapp `:3030`**, Lakekeeper UI `:8181/ui/`, MinIO console `:9001`, Thrift JDBC `:10000`. With the optional Flink engine: **Flink web UI `:8081`**.
+
+## Optional: Flink streaming engine
+
+Spark Thrift is the primary engine and runs the whole V3 batch demo. You can
+**also** add **Apache Flink 1.20** as a second engine that *streams* rows into
+the same Iceberg catalog while Spark queries them — real multi-engine interop on
+one source of truth.
+
+### What Flink does here
+
+Flink runs one continuous job: a built-in `datagen` source fabricates synthetic
+trades and an Iceberg sink appends them to `demo.market.trades_stream`. The sink
+commits a new Iceberg snapshot **on every checkpoint** (~10s), so the table grows
+in visible bursts. Nothing external is involved — it is self-contained, like the
+rest of the demo. Spark's role is unchanged: batch DDL/DML, MERGE/CDC, time
+travel, maintenance. Flink's role is the thing Spark's batch demo can't show —
+a long-running append stream.
+
+### Why additive, not a Spark/Flink toggle
+
+The two engines are **not interchangeable**, so this is deliberately *not* an
+either/or switch. `sql/demo.sql` is Spark-dialect: it uses `MERGE INTO`, the
+`range()` table-valued function, Spark's `CALL` maintenance procedures, and
+Spark's `CREATE TABLE ... TBLPROPERTIES` DDL — none of which exist in Flink SQL
+(different `CREATE CATALOG ... WITH (...)` syntax, no `MERGE`, no `range()`,
+different maintenance). A Flink-*replacement* mode would force a thinner
+Flink-only demo and drop roughly half the V3 features. So Flink is purely
+additive: **zero loss** of Spark coverage, plus a streaming-interop story.
+Please don't "fix" this back into a toggle.
+
+### The interop story
+
+One Lakekeeper catalog, one MinIO bucket, two engines. Flink writes
+`demo.market.trades_stream`; Spark reads the identical table through the same
+REST catalog. Proof is the row count climbing while Flink runs — query it twice,
+~10s apart:
+
+```bash
+docker exec spark-thrift /opt/spark/bin/beeline \
+  -u jdbc:hive2://localhost:10000 \
+  -e "SELECT count(*) FROM demo.market.trades_stream;"
+```
+
+The count strictly increases between runs: Flink is committing, Spark is reading,
+neither knows about the other — they only share the catalog.
+
+### How to choose it
+
+`./deploy.sh` asks interactively, before standing anything up:
+
+```
+================================================================
+  Engine selection
+================================================================
+  Spark Thrift Server is ALWAYS started — it runs the full V3
+  demo (sql/demo.sql): MERGE/CDC, branches, time travel, deletion
+  vectors, maintenance. This is the primary engine.
+
+  You can ALSO add Apache Flink as a second, streaming engine on
+  the SAME Lakekeeper catalog + MinIO bucket. Flink does NOT
+  replace Spark and does NOT re-run the batch demo. Instead it:
+
+    • runs a continuous streaming job (datagen -> Iceberg sink)
+    • appends rows every second to demo.market.trades_stream
+    • commits on each checkpoint (~10s)
+
+  ...while Spark/beeline queries the SAME table and watches the
+  row count climb. This demonstrates multi-engine interop on one
+  Iceberg catalog — two engines, one source of truth.
+
+  Cost: +2 containers (jobmanager, taskmanager), ~3-4 GiB extra
+  RAM. Recommended on a host with >12 GiB free.
+================================================================
+
+  1) Spark only            (default)
+  2) Spark + Flink streaming
+
+  Pick [1/2]:
+```
+
+- **Option 1 (default)** is the original Spark-only stack, byte-for-byte
+  unchanged.
+- **Option 2** adds two containers (`flink-jobmanager`, `flink-taskmanager`,
+  ~3–4 GiB RAM), waits for the cluster, submits the streaming job, and prints the
+  interop check.
+
+Non-interactive runs (CI, piped stdin) skip the prompt and default to Spark
+only. `ENABLE_FLINK=1 ./deploy.sh` is a silent escape hatch that selects
+Spark + Flink without the menu.
+
+When enabled, watch the running INSERT job at the **Flink web UI**,
+`http://localhost:8081`. Data and metadata land under
+`warehouse/demo/market/trades_stream` in MinIO (`:9001` console).
+
+### Tuning
+
+- **Throughput** — `rows-per-second` in `flink/sql/stream.sql` (default `50`).
+  Raise to stress the sink, lower to slow the climb.
+- **Commit cadence** — `execution.checkpointing.interval` in `flink/config.yaml`
+  (default `10s`). The Iceberg sink makes rows visible to Spark only on a
+  completed checkpoint, so this is also how often the count jumps.
 
 ## Webapp
 
@@ -163,6 +276,8 @@ destroy.sh                          # teardown (terraform destroy + force-remove
 scripts/bootstrap.sh                # MinIO bucket + Lakekeeper warehouse registration
 sql/demo.sql                        # V3 showcase (mounted into spark-thrift at /opt/demo)
 spark/spark-defaults.conf           # Iceberg packages + REST catalog wiring (ResolvingFileIO)
+flink/config.yaml                   # Flink 1.20 cluster config (optional engine; checkpointing, Java-17 opens)
+flink/sql/stream.sql                # Flink streaming job: datagen → demo.market.trades_stream
 webapp/                             # Next.js UI + server routes (storage-aware: MinIO / GCS)
 .demo-state/                        # persisted storage config + SA key (gitignored, mounted → /data)
 ```
@@ -346,6 +461,48 @@ endpoint can briefly return an empty or non-JSON body. The prefix lookup in
 `bootstrap.sh` polls until it gets a parseable response and prints the last body
 if it gives up. If you hit that failure message, the warehouse probably didn't
 register at all (check `docker logs lakekeeper`).
+
+### Flink: `trades_stream` count never grows (no data files)
+
+The Iceberg sink commits a snapshot — and makes rows visible to Spark — **only
+on a completed checkpoint**. Without `execution.checkpointing.interval` the job
+runs, buffers rows, and commits *nothing*; Spark sees an empty table forever.
+`flink/config.yaml` sets a 10s checkpoint interval for exactly this reason —
+don't remove it. Confirm checkpoints are completing at
+`http://localhost:8081` → the job → Checkpoints tab.
+
+### Flink: job loops in `RESTARTING` with `InaccessibleObjectException`
+
+Flink on Java 17 needs `--add-opens`/`--add-exports` JVM flags for its
+Kryo/serialization paths. Mounting `flink/config.yaml` **replaces** the image's
+default config, which ships those flags, so `config.yaml` re-supplies them under
+`env.java.opts.all`. If you trim that block, the streaming job dies every
+checkpoint with `java.lang.reflect.InaccessibleObjectException: ... module
+java.base does not "opens java.util"`.
+
+### Flink: `CREATE CATALOG` throws `ClassNotFoundException` for Hadoop
+
+`java.lang.ClassNotFoundException: org.apache.hadoop.conf.Configuration` on the
+`CREATE CATALOG` statement means the Hadoop classes aren't on the classpath. The
+`flink:1.20` image ships no Hadoop and `iceberg-flink-runtime` doesn't shade it,
+so `main.tf` stages `flink-shaded-hadoop-2-uber` into `/opt/flink/lib` alongside
+the Iceberg jars. If you change the jar-staging loop, keep that jar.
+
+### Flink: host runs out of memory with both engines
+
+Spark already takes ~4 GiB on a 7.65 GiB Docker host; the two Flink containers
+add ~3.6 GiB (`jobmanager.memory.process.size` 1600m + `taskmanager` 2g in
+`config.yaml`). On a tight laptop, either give Docker more RAM (>12 GiB
+recommended for the combined stack) or drop `spark.driver.memory` in
+`spark/spark-defaults.conf` when co-running.
+
+### Flink: V3 write features
+
+The streaming table is **format-version 2, append-only** on purpose. Flink's
+Iceberg sink lags Spark on V3 writes (deletion vectors, row lineage), so v1 stays
+on V2 appends to stay safe. Spark reads V2 and V3 tables identically, so this
+doesn't affect the interop check. A V3 streaming table with equality-delete
+upserts is a stretch goal, not a shipped feature.
 
 ---
 

@@ -225,6 +225,105 @@ resource "docker_container" "spark_thrift" {
 }
 
 # ----------------------------------------------------------------------------
+# Flink streaming engine (OPTIONAL — count-gated on var.enable_flink).
+#
+# A standalone Flink 1.20 SESSION cluster (jobmanager + taskmanager) that streams
+# synthetic trades into the SAME Lakekeeper REST catalog + MinIO bucket Spark
+# uses. This is ADDITIVE: Spark Thrift stays the primary engine and runs the full
+# V3 batch demo; Flink does NOT replace it and does NOT re-run demo.sql. It
+# demonstrates multi-engine interop — Flink writes demo.market.trades_stream,
+# Spark reads it, one catalog, one source of truth. deploy.sh submits the job
+# (flink/sql/stream.sql) and shows the row count climbing.
+#
+# Java 17 image to match Spark (Iceberg 1.11 jars are class-file 61).
+# ----------------------------------------------------------------------------
+resource "docker_image" "flink" {
+  count = var.enable_flink ? 1 : 0
+  name  = "flink:1.20-scala_2.12-java17"
+}
+
+locals {
+  # Jar staging idiom mirrors spark_thrift's: curl the Iceberg (+ Hadoop) jars
+  # into /opt/flink/lib (Flink's system classloader) at container start, guarded
+  # by an existence check so a restart doesn't re-download. Three jars:
+  #   - iceberg-flink-runtime-1.20  : Iceberg sink/catalog for Flink 1.20
+  #   - iceberg-aws-bundle          : S3FileIO for MinIO (same bundle Spark uses)
+  #   - flink-shaded-hadoop-2-uber  : REQUIRED. iceberg-flink-runtime does NOT
+  #     shade Hadoop and the flink image ships none, so CREATE CATALOG throws
+  #     ClassNotFoundException: org.apache.hadoop.conf.Configuration without it.
+  flink_jar_stage = <<-EOT
+    set -e
+    ICEBERG_VER=1.11.0
+    FLINK_MINOR=1.20
+    HADOOP_UBER=flink-shaded-hadoop-2-uber-2.8.3-10.0
+    ICE_MAVEN=https://repo1.maven.org/maven2/org/apache/iceberg
+    FLINK_MAVEN=https://repo1.maven.org/maven2/org/apache/flink/flink-shaded-hadoop-2-uber/2.8.3-10.0
+    fetch() { # $1 dest filename, $2 url
+      dst=/opt/flink/lib/$${1}
+      if [ ! -f $${dst} ]; then echo ">> fetching $${1}"; curl -fSL -o $${dst} "$${2}"; fi
+    }
+    fetch iceberg-flink-runtime-$${FLINK_MINOR}-$${ICEBERG_VER}.jar $${ICE_MAVEN}/iceberg-flink-runtime-$${FLINK_MINOR}/$${ICEBERG_VER}/iceberg-flink-runtime-$${FLINK_MINOR}-$${ICEBERG_VER}.jar
+    fetch iceberg-aws-bundle-$${ICEBERG_VER}.jar $${ICE_MAVEN}/iceberg-aws-bundle/$${ICEBERG_VER}/iceberg-aws-bundle-$${ICEBERG_VER}.jar
+    fetch $${HADOOP_UBER}.jar $${FLINK_MAVEN}/$${HADOOP_UBER}.jar
+  EOT
+}
+
+resource "docker_container" "flink_jobmanager" {
+  count      = var.enable_flink ? 1 : 0
+  name       = "flink-jobmanager"
+  image      = docker_image.flink[0].image_id
+  user       = "root"
+  # Catalog must exist before the stream job points at it — same gate as Spark.
+  depends_on = [null_resource.bootstrap]
+  networks_advanced { name = docker_network.lake.name }
+  ports {
+    internal = 8081
+    external = 8081
+  }
+  # Standard-YAML config (Flink 1.20). Mounting it REPLACES the image default,
+  # so flink/config.yaml re-supplies the Java-17 --add-opens flags (see comment
+  # there) — without them the streaming job dies every checkpoint.
+  volumes {
+    host_path      = abspath("${path.module}/flink/config.yaml")
+    container_path = "/opt/flink/conf/config.yaml"
+    read_only      = true
+  }
+  # stream.sql — submitted by deploy.sh via sql-client.sh -f.
+  volumes {
+    host_path      = abspath("${path.module}/flink/sql")
+    container_path = "/opt/flink/sql"
+    read_only      = true
+  }
+  command = [
+    "/bin/bash", "-c",
+    "${local.flink_jar_stage}\n/opt/flink/bin/jobmanager.sh start-foreground",
+  ]
+  restart = "unless-stopped"
+}
+
+resource "docker_container" "flink_taskmanager" {
+  count      = var.enable_flink ? 1 : 0
+  name       = "flink-taskmanager"
+  image      = docker_image.flink[0].image_id
+  user       = "root"
+  # Needs the jobmanager up to register; the bootstrap gate keeps ordering sane.
+  depends_on = [docker_container.flink_jobmanager]
+  networks_advanced { name = docker_network.lake.name }
+  # Same config (finds the JM via jobmanager.rpc.address) and same jar staging —
+  # the taskmanager runs the sink operator, so it needs the Iceberg jars too.
+  volumes {
+    host_path      = abspath("${path.module}/flink/config.yaml")
+    container_path = "/opt/flink/conf/config.yaml"
+    read_only      = true
+  }
+  command = [
+    "/bin/bash", "-c",
+    "${local.flink_jar_stage}\n/opt/flink/bin/taskmanager.sh start-foreground",
+  ]
+  restart = "unless-stopped"
+}
+
+# ----------------------------------------------------------------------------
 # Webapp  (Next.js 15 — guided clickthrough of sql/demo.sql)
 # Rebuilds when anything under webapp/ changes (src_hash trigger).
 # ----------------------------------------------------------------------------

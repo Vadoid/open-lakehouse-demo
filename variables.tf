@@ -35,3 +35,14 @@ variable "warehouse" {
   type        = string
   default     = "demo"
 }
+
+# Optional second engine. When true, deploy.sh stands up a Flink 1.20 session
+# cluster (jobmanager + taskmanager) that streams synthetic trades into the SAME
+# Lakekeeper catalog + MinIO bucket Spark uses. Additive only — Spark Thrift and
+# the batch demo are unaffected. Set by deploy.sh's interactive engine menu
+# (-var enable_flink=...), default off so the Spark-only path is unchanged.
+variable "enable_flink" {
+  description = "Add an optional Flink streaming engine (jobmanager + taskmanager)"
+  type        = bool
+  default     = false
+}

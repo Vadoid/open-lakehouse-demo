@@ -1,0 +1,68 @@
+# Flink 1.20 cluster config — STANDARD YAML (`config.yaml`), not the legacy
+# flat `flink-conf.yaml`. Flink 1.20 reads this nested form from
+# /opt/flink/conf/config.yaml (mounted read-only by main.tf). Mirrors the
+# "bounded memory, comment every non-obvious knob" style of
+# spark/spark-defaults.conf.
+#
+# Both the jobmanager and the taskmanager mount this SAME file. The taskmanager
+# finds the jobmanager through `jobmanager.rpc.address` below.
+
+jobmanager:
+  rpc:
+    # Taskmanager dials the jobmanager by container name on the lakedemo
+    # network. Must match docker_container.flink_jobmanager's name in main.tf.
+    address: flink-jobmanager
+  memory:
+    # Cap JM heap+overhead. The demo host is small (~7.65 GiB to Docker, Spark
+    # already takes ~4g); an uncapped JVM would fight Spark for RAM.
+    process:
+      size: 1600m
+
+taskmanager:
+  # >=2 slots so the streaming job's source + sink chain has room, and a second
+  # job (stretch goal) could run without a topology change.
+  numberOfTaskSlots: 2
+  memory:
+    process:
+      size: 2g
+
+# One pipeline by default — the demo runs a single INSERT. Keeps the slot/heap
+# math simple on a laptop.
+parallelism:
+  default: 1
+
+execution:
+  checkpointing:
+    # NON-NEGOTIABLE. The Iceberg sink commits a new snapshot (and makes data
+    # files visible to Spark) ONLY on a completed checkpoint. With no
+    # checkpointing the job runs, buffers rows, and commits NOTHING — Spark sees
+    # an empty table forever. 10s = a new snapshot roughly every 10s, so the
+    # beeline row-count check visibly climbs.
+    interval: 10s
+    # EXACTLY_ONCE pairs the datagen source offsets with the Iceberg commit so a
+    # restart neither drops nor duplicates rows.
+    mode: EXACTLY_ONCE
+
+state:
+  backend:
+    # In-heap state. The datagen->Iceberg pipeline is stateless beyond
+    # checkpoint barriers, so no need for RocksDB/disk.
+    type: hashmap
+
+# Java 17 module-access flags. CRITICAL: mounting this file REPLACES the image's
+# default /opt/flink/conf/config.yaml, which ships exactly these `--add-opens`/
+# `--add-exports`. Without them, Flink's Kryo/chill serializer can't reach
+# java.util internals during checkpoint state serialization and the streaming
+# job dies every checkpoint with InaccessibleObjectException (job loops in
+# RESTARTING, zero rows committed). Copied verbatim from the flink:1.20 image.
+env:
+  java:
+    opts:
+      all: --add-exports=java.base/sun.net.util=ALL-UNNAMED --add-exports=java.rmi/sun.rmi.registry=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED --add-exports=java.security.jgss/sun.security.krb5=ALL-UNNAMED --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.net=ALL-UNNAMED --add-opens=java.base/java.io=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/sun.nio.ch=ALL-UNNAMED --add-opens=java.base/java.lang.reflect=ALL-UNNAMED --add-opens=java.base/java.text=ALL-UNNAMED --add-opens=java.base/java.time=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.base/java.util.concurrent=ALL-UNNAMED --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED --add-opens=java.base/java.util.concurrent.locks=ALL-UNNAMED
+
+rest:
+  # Serve the web UI / REST API on all interfaces inside the container so the
+  # host port mapping (8081:8081 in main.tf) and deploy.sh's health poll reach
+  # it. address is what the JM advertises; bind-address is what it listens on.
+  address: flink-jobmanager
+  bind-address: 0.0.0.0
