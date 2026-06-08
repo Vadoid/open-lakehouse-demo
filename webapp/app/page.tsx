@@ -6,6 +6,7 @@ import ArchDiagram from "@/components/ArchDiagram";
 import ResetButton from "@/components/ResetButton";
 import CredsRow from "@/components/CredsRow";
 import DynamicLink from "@/components/DynamicLink";
+import Collapsible from "@/components/Collapsible";
 import { loadConfig, applyConfig, DEFAULT_CONFIG, DemoConfig } from "@/lib/demoConfig";
 
 const PHASES = [
@@ -77,7 +78,7 @@ export default function Home() {
         </h1>
         <p className="text-sm md:text-base text-gray-300 leading-relaxed max-w-3xl">
           A fully self-contained open lakehouse running locally on Apache Iceberg{" "}
-          <strong className="text-ice-300">version 3</strong>. Built with six Docker containers wired together by Terraform. 
+          <strong className="text-ice-300">version 3</strong>. Built with {flinkEnabled ? "eight" : "six"} Docker containers wired together by Terraform.
           Run SQL queries through the Spark Thrift Server; watch table data and metadata land directly in {store}; manage pointers through Lakekeeper (the open REST catalog). Follow the live timeline and watch your {isGcs ? "object-store" : "S3"} files, schemas, and lineage evolve in real-time.
         </p>
       </header>
@@ -94,37 +95,158 @@ export default function Home() {
           <ArchDiagram />
         </div>
         
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 text-xs text-gray-400 leading-relaxed">
-          <div className="rounded-lg border border-ink-700/60 bg-ink-900/30 p-4 hover:border-ink-700 transition">
-            <h3 className="text-ice-300 font-semibold mb-1 flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-ice-400" />
-              {store} <span className="text-gray-600 font-normal">· object store</span>
-            </h3>
-            <p>
-              {isGcs
-                ? "Google Cloud Storage bucket. Iceberg writes parquet data files, manifest lists, and puffin deletion vectors here. Lakekeeper vends scoped credentials per table. Easily swap this out for AWS S3, MinIO, or Azure Blob in production."
-                : "S3-compatible bucket storage. Iceberg writes parquet data files, manifest lists, and puffin deletion vectors here. Easily swap this out for standard AWS S3, GCS, or Azure Blob in production."}
-            </p>
+        <Collapsible title="Component Reference" hint="per-service detail">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 text-xs text-gray-400 leading-relaxed">
+            <div className="rounded-lg border border-ink-700/60 bg-ink-900/30 p-4 hover:border-ink-700 transition">
+              <h3 className="text-ice-300 font-semibold mb-1 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-ice-400" />
+                {store} <span className="text-gray-600 font-normal">· object store</span>
+              </h3>
+              <p>
+                {isGcs
+                  ? "Google Cloud Storage bucket. Iceberg writes parquet data files, manifest lists, and puffin deletion vectors here. Lakekeeper vends scoped credentials per table. Easily swap this out for AWS S3, MinIO, or Azure Blob in production."
+                  : "S3-compatible bucket storage. Iceberg writes parquet data files, manifest lists, and puffin deletion vectors here. Easily swap this out for standard AWS S3, GCS, or Azure Blob in production."}
+              </p>
+            </div>
+            <div className="rounded-lg border border-ink-700/60 bg-ink-900/30 p-4 hover:border-ink-700 transition">
+              <h3 className="text-ice-300 font-semibold mb-1 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-ice-400" />
+                Lakekeeper <span className="text-gray-600 font-normal">· REST Catalog</span>
+              </h3>
+              <p>
+                A high-performance Rust implementation of the open Iceberg REST catalog specification. Standardizes table namespace registration and snapshot resolution for Spark, Trino, Snowflake, and DuckDB.
+              </p>
+            </div>
+            <div className="rounded-lg border border-ink-700/60 bg-ink-900/30 p-4 hover:border-ink-700 transition">
+              <h3 className="text-ice-300 font-semibold mb-1 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-ice-400" />
+                Spark Thrift <span className="text-gray-600 font-normal">· SQL Engine</span>
+              </h3>
+              <p>
+                Uses Apache Spark 3.5.6 running `iceberg-spark-runtime`. Exposes HiveServer2 wire protocol on port 10000, allowing direct query execution without additional Python or Scala shims.
+              </p>
+            </div>
+            {flinkEnabled && (
+              <div className="rounded-lg border border-ink-700/60 bg-ink-900/30 p-4 hover:border-ink-700 transition">
+                <h3 className="text-ice-300 font-semibold mb-1 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                  Flink <span className="text-gray-600 font-normal">· streaming engine</span>
+                </h3>
+                <p>
+                  Apache Flink 1.20 (jobmanager + taskmanager) running `iceberg-flink-runtime`.
+                  A second engine sharing the same Lakekeeper catalog and {store} bucket as Spark:
+                  a continuous datagen→Iceberg job appends to a format-version 3 table, committing
+                  on every checkpoint (~10s) while Spark reads the same table live. Optional — off
+                  on Spark-only deploys.
+                </p>
+              </div>
+            )}
           </div>
-          <div className="rounded-lg border border-ink-700/60 bg-ink-900/30 p-4 hover:border-ink-700 transition">
-            <h3 className="text-ice-300 font-semibold mb-1 flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-ice-400" />
-              Lakekeeper <span className="text-gray-600 font-normal">· REST Catalog</span>
-            </h3>
-            <p>
-              A high-performance Rust implementation of the open Iceberg REST catalog specification. Standardizes table namespace registration and snapshot resolution for Spark, Trino, Snowflake, and DuckDB.
+        </Collapsible>
+      </section>
+
+      {/* Authentication & Credentials */}
+      <section>
+        <Collapsible title="Authentication & Credentials" hint={`${store} mode`}>
+          <div className="space-y-4 text-xs text-gray-400 leading-relaxed">
+            <p className="text-[11px] text-gray-500 max-w-3xl">
+              Two independent planes. The <span className="text-gray-300">control plane</span> (catalog
+              auth) is identical for every backend; the <span className="text-gray-300">data plane</span>{" "}
+              (object-store auth) is where MinIO and GCS diverge. Everything here is{" "}
+              <span className="text-amber-300/80">full-permission and demo-grade</span> — wire a real
+              issuer and scoped credentials for production.
             </p>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              {/* Control plane card */}
+              <div className="rounded-lg border border-ink-700/60 bg-ink-900/30 p-4 space-y-2.5">
+                <h3 className="text-ice-300 font-semibold flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-ice-400" />
+                  Control plane <span className="text-gray-600 font-normal">· catalog auth</span>
+                </h3>
+                <p>
+                  Spark, Flink, and this webapp all reach Lakekeeper&apos;s REST catalog with a single
+                  static bearer token <code className="text-ice-300">token=dummy</code> (sent as{" "}
+                  <code className="text-ice-300">Authorization: Bearer dummy</code>). Same for MinIO and GCS.
+                </p>
+                <p>
+                  Lakekeeper runs <code className="text-ice-300">AUTHZ_BACKEND=allow-all</code>, so{" "}
+                  <span className="text-gray-300">authorization is open</span>. There is also no
+                  IdP/OIDC wired up, so <span className="text-gray-300">authentication is open</span> too —
+                  the <code className="text-ice-300">dummy</code> token is accepted but never validated.
+                  (Two distinct things: authz ≠ authn.)
+                </p>
+                <p>
+                  The management API (<code className="text-ice-300">/management/v1/bootstrap</code>,{" "}
+                  <code className="text-ice-300">/warehouse</code>) takes no auth header at all; the catalog
+                  API expects the <code className="text-ice-300">dummy</code> bearer (ignored under allow-all).
+                </p>
+                <p className="text-[11px] text-gray-500">
+                  Production: wire an OIDC issuer + a real authz backend.
+                </p>
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  <span className="px-1.5 py-0.5 rounded bg-ink-800/80 border border-ink-700 font-mono text-[10px] text-gray-400">
+                    Authorization: Bearer dummy
+                  </span>
+                </div>
+              </div>
+
+              {/* Data plane card */}
+              <div className="rounded-lg border border-ink-700/60 bg-ink-900/30 p-4 space-y-3">
+                <h3 className="text-ice-300 font-semibold flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-ice-400" />
+                  Data plane <span className="text-gray-600 font-normal">· object-store auth</span>
+                </h3>
+
+                {/* MinIO sub-block */}
+                <div className={isGcs ? "opacity-50" : ""}>
+                  <h4 className={`font-semibold mb-1 flex items-center gap-1.5 ${isGcs ? "text-gray-400" : "text-ice-200"}`}>
+                    MinIO <span className="text-gray-600 font-normal">· static S3 key{!isGcs && " · active"}</span>
+                  </h4>
+                  <p>
+                    The access key (<code className={isGcs ? "text-gray-400" : "text-ice-300"}>minio-admin</code> /{" "}
+                    <code className={isGcs ? "text-gray-400" : "text-ice-300"}>minio-admin-password</code>) is
+                    configured directly on each engine — Spark&apos;s <code className={isGcs ? "text-gray-400" : "text-ice-300"}>s3.access-key-id</code> /{" "}
+                    <code className={isGcs ? "text-gray-400" : "text-ice-300"}>s3.secret-access-key</code>, the Flink
+                    catalog DDL, and the webapp via env. Lakekeeper registers the S3 warehouse with{" "}
+                    <code className={isGcs ? "text-gray-400" : "text-ice-300"}>sts-enabled: false</code>, so it does
+                    not vend STS credentials — each engine uses its own locally-configured static key. Same root
+                    credential everywhere.
+                  </p>
+                </div>
+
+                {/* GCS sub-block */}
+                <div className={isGcs ? "" : "opacity-50"}>
+                  <h4 className={`font-semibold mb-1 flex items-center gap-1.5 ${isGcs ? "text-ice-200" : "text-gray-400"}`}>
+                    GCS <span className="text-gray-600 font-normal">· vended OAuth2{isGcs && " · active"}</span>
+                  </h4>
+                  <p>
+                    No GCS key lives in any engine config. The user pastes a service-account JSON into the webapp
+                    at runtime; that key is handed to Lakekeeper as the warehouse{" "}
+                    <code className={isGcs ? "text-ice-300" : "text-gray-400"}>storage-credential</code>{" "}
+                    (<code className={isGcs ? "text-ice-300" : "text-gray-400"}>credential-type: service-account-key</code>).
+                    Engines send <code className={isGcs ? "text-ice-300" : "text-gray-400"}>X-Iceberg-Access-Delegation: vended-credentials</code>{" "}
+                    with <code className={isGcs ? "text-ice-300" : "text-gray-400"}>rest.access-delegation=true</code>;
+                    on load-table Lakekeeper mints a downscoped, short-lived OAuth2 token per table and returns it in
+                    the REST response. <code className={isGcs ? "text-ice-300" : "text-gray-400"}>ResolvingFileIO</code>{" "}
+                    routes <code className={isGcs ? "text-ice-300" : "text-gray-400"}>gs://</code> to GCSFileIO, which
+                    uses that token. <span className="text-gray-300">Engines never see the SA key.</span>
+                  </p>
+                  <p className="mt-1.5 text-[11px] text-gray-500">
+                    Asymmetry: the webapp server-side (file tree / lineage graph) uses the full SA key directly as a
+                    plain GCS client, not a vended token — it talks to GCS outside the catalog.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  <span className="px-1.5 py-0.5 rounded bg-ink-800/80 border border-ink-700 font-mono text-[10px] text-gray-400">
+                    X-Iceberg-Access-Delegation: vended-credentials
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
-          <div className="rounded-lg border border-ink-700/60 bg-ink-900/30 p-4 hover:border-ink-700 transition">
-            <h3 className="text-ice-300 font-semibold mb-1 flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-ice-400" />
-              Spark Thrift <span className="text-gray-600 font-normal">· SQL Engine</span>
-            </h3>
-            <p>
-              Uses Apache Spark 3.5.6 running `iceberg-spark-runtime`. Exposes HiveServer2 wire protocol on port 10000, allowing direct query execution without additional Python or Scala shims.
-            </p>
-          </div>
-        </div>
+        </Collapsible>
       </section>
 
       {/* Phases timeline section */}
@@ -174,11 +296,9 @@ export default function Home() {
       </section>
 
       {/* Comparison table */}
-      <section className="space-y-4">
-        <div>
-          <h2 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">Iceberg Format Comparison</h2>
-          <p className="text-xs text-gray-400">See where Iceberg V3 stands compared to V1, V2, and Delta Lake spec.</p>
-        </div>
+      <section>
+        <Collapsible title="Iceberg Format Comparison" hint="V1 / V2 / V3 / Delta">
+        <p className="text-xs text-gray-400 mb-4">See where Iceberg V3 stands compared to V1, V2, and Delta Lake spec.</p>
 
         <div className="overflow-x-auto rounded-xl border border-ink-700 shadow-lg bg-ink-900/20 backdrop-blur-md">
           <table className="w-full text-xs">
@@ -220,6 +340,7 @@ export default function Home() {
             </tbody>
           </table>
         </div>
+        </Collapsible>
       </section>
 
       {/* Helper Warning */}
@@ -322,8 +443,7 @@ export default function Home() {
 
       {/* Footer / Citation details */}
       <footer className="pt-8 border-t border-ink-700/60 text-xs text-gray-500 space-y-6">
-        <div className="space-y-2">
-          <div className="uppercase tracking-wider text-gray-500 text-[10px] font-bold">Citations & References</div>
+        <Collapsible title="Citations & References" hint="specs & releases">
           <ul className="grid gap-3 sm:grid-cols-2">
             {[
               {
@@ -361,12 +481,12 @@ export default function Home() {
               </li>
             ))}
           </ul>
-        </div>
-        
+        </Collapsible>
+
         <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-gray-600 pt-3 border-t border-ink-800/40">
           <a href="https://github.com/Vadoid/open-lakehouse-demo" target="_blank" rel="noopener noreferrer"
              className="hover:text-ice-400 transition-colors">github.com/Vadoid/open-lakehouse-demo</a>
-          <span>Apache Iceberg V3 · Lakekeeper · Spark Thrift · {store}</span>
+          <span>Apache Iceberg V3 · Lakekeeper · Spark Thrift{flinkEnabled ? " · Flink" : ""} · {store}</span>
         </div>
       </footer>
     </div>
