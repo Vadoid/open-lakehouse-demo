@@ -56,6 +56,11 @@
   --arch-spark-fg:     #e9d8ff;
   --arch-spark-sub:    #cbb5e3;
 
+  --arch-flink-bg:     #14342a;
+  --arch-flink-stroke: #6fc99a;
+  --arch-flink-fg:     #d6fae8;
+  --arch-flink-sub:    #a8e2c4;
+
   --arch-lake-bg:     #0f3340;
   --arch-lake-stroke: #5fc4d3;
   --arch-lake-fg:     #d6f4fa;
@@ -160,6 +165,11 @@
   --arch-spark-stroke: #7c3aed;
   --arch-spark-fg:     #3b0764;
   --arch-spark-sub:    #5b21b6;
+
+  --arch-flink-bg:     #dcfce7;
+  --arch-flink-stroke: #15803d;
+  --arch-flink-fg:     #052e16;
+  --arch-flink-sub:    #166534;
 
   --arch-lake-bg:     #cffafe;
   --arch-lake-stroke: #0e7490;

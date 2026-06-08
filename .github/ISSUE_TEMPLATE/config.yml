@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Usage questions and setup help
+    url: https://github.com/Vadoid/open-lakehouse-demo#readme
+    about: How to run the stack, deploy modes, and troubleshooting live in the README. Check there before opening an issue.

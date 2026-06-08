@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Cancel an in-progress run when a newer commit lands on the same ref.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # NOTE: these three job names (webapp, shell, terraform) are the stable
+  # required-status-check names referenced by CONTRIBUTING.md's branch-protection
+  # section. Renaming a job means updating that doc and the protection rule.
+  webapp:
+    name: webapp
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: webapp
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: webapp/package-lock.json
+      - run: npm ci --legacy-peer-deps
+      - run: npm run typecheck
+      - run: npm run test:coverage
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: webapp-coverage-lcov
+          path: webapp/coverage/lcov.info
+          if-no-files-found: ignore
+
+  shell:
+    name: shell
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Lint exactly the project's three scripts. Running shellcheck directly
+      # (rather than an auto-discovering action) keeps node_modules' own *.sh
+      # files out of scope. shellcheck ships on the ubuntu-latest runner.
+      - run: shellcheck --version
+      - run: shellcheck deploy.sh destroy.sh scripts/bootstrap.sh
+
+  terraform:
+    name: terraform
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          # Pin the version: `fmt -check` is formatting-version-sensitive, so a
+          # future terraform release could reformat main.tf and redden CI on an
+          # unrelated PR. Matches the version the repo is formatted against.
+          terraform_version: "1.15.5"
+      - run: terraform fmt -check -recursive
+      - run: terraform init -backend=false
+      - run: terraform validate

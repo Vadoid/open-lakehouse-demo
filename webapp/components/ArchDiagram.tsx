@@ -11,6 +11,10 @@ import { useEffect, useState } from "react";
 export default function ArchDiagram() {
   const [isGcs, setIsGcs] = useState(false);
   const [bucket, setBucket] = useState("warehouse");
+  // Flink is the optional second engine — only draw its box + edges when the
+  // stack was deployed with it. /api/stream-count reports `enabled` off the same
+  // FLINK_ENABLED env the LiveStreamCount widget reads.
+  const [flinkEnabled, setFlinkEnabled] = useState(false);
 
   useEffect(() => {
     fetch("/api/storage-setup")
@@ -20,6 +24,10 @@ export default function ArchDiagram() {
         if (j.bucket) setBucket(j.bucket);
       })
       .catch(() => {});
+    fetch("/api/stream-count")
+      .then((r) => r.json())
+      .then((j) => setFlinkEnabled(!!j.enabled))
+      .catch(() => {});
   }, []);
 
   const storeName = isGcs ? "GCS" : "MinIO";
@@ -27,6 +35,9 @@ export default function ArchDiagram() {
   const storeEdge = isGcs ? "GCS API · 443" : "S3 :9000";
   const fileIo = isGcs ? "GCSFileIO · Parquet + Puffin" : "S3FileIO · Parquet + Puffin";
   const sparkBundle = isGcs ? "iceberg-gcp-bundle 1.11.0" : "iceberg-aws-bundle 1.11.0";
+  // Flink writes through the SAME ResolvingFileIO path as Spark — short label
+  // for the data-plane edge.
+  const flinkIo = isGcs ? "GCSFileIO · vended" : "S3FileIO · vended";
 
   return (
     <svg
@@ -34,7 +45,7 @@ export default function ArchDiagram() {
       xmlns="http://www.w3.org/2000/svg"
       className="w-full h-auto"
       role="img"
-      aria-label={`Architecture diagram: demo-webapp at top fans out to Spark Thrift, Lakekeeper, and ${storeName}. Lakekeeper backs onto Postgres. Spark Thrift reads and writes ${storeName}.`}
+      aria-label={`Architecture diagram: demo-webapp at top fans out to Spark Thrift, Lakekeeper, and ${storeName}. Lakekeeper backs onto Postgres. Spark Thrift reads and writes ${storeName}.${flinkEnabled ? ` An optional Flink streaming engine writes to ${storeName} through the same Lakekeeper catalog.` : ""}`}
     >
       <defs>
         <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
@@ -134,6 +145,35 @@ export default function ArchDiagram() {
         <rect x="600" y="378" width="210" height="22" rx="11" fill="var(--arch-chip-bg)" stroke="var(--arch-chip-stroke)" />
         <text x="705" y="394" textAnchor="middle" fontFamily="ui-monospace, monospace" fontSize="11" fill="var(--arch-chip-fg)">{fileIo}</text>
       </g>
+
+      {/* Flink (optional second engine). Only drawn when the stack was deployed
+          with Flink. Dashed border + dim edges read as the optional plane; it
+          shares the SAME Lakekeeper catalog and object store as Spark. */}
+      {flinkEnabled && (
+        <>
+          {/* Flink box, bottom-left, below Spark. */}
+          <g>
+            <rect x="40" y="432" width="220" height="104" rx="10" fill="var(--arch-flink-bg)" stroke="var(--arch-flink-stroke)" strokeWidth="1.5" strokeDasharray="4 4" />
+            <text x="150" y="458" textAnchor="middle" fontFamily="ui-sans-serif, system-ui" fontWeight="600" fontSize="15" fill="var(--arch-flink-fg)">Flink <tspan fontWeight="400" fontSize="11" fill="var(--arch-flink-sub)">(streaming)</tspan></text>
+            <text x="150" y="476" textAnchor="middle" fontFamily="ui-sans-serif, system-ui" fontSize="11" fill="var(--arch-flink-sub)">streaming · jobmanager + taskmanager</text>
+            <text x="150" y="500" textAnchor="middle" fontFamily="ui-monospace, monospace" fontSize="11" fill="var(--arch-flink-sub)">flink 1.20</text>
+            <text x="150" y="516" textAnchor="middle" fontFamily="ui-monospace, monospace" fontSize="11" fill="var(--arch-flink-sub)">iceberg-flink-runtime 1.11.0</text>
+            <text x="150" y="532" textAnchor="middle" fontFamily="ui-monospace, monospace" fontSize="11" fill="var(--arch-flink-sub)">{sparkBundle}</text>
+          </g>
+
+          {/* Flink <-> Lakekeeper (same REST catalog as Spark). */}
+          <path d="M 200 432 C 270 408, 310 378, 360 352" stroke="var(--arch-edge-dim)" strokeWidth="1.5" strokeDasharray="5 4" fill="none" markerEnd="url(#arrow-dim)" markerStart="url(#arrow-dim)" />
+          <text x="306" y="392" textAnchor="middle" fontFamily="ui-sans-serif, system-ui" fontSize="10" fill="var(--arch-edge-label)">REST catalog</text>
+
+          {/* Flink -> object store (data plane, ResolvingFileIO + vended creds).
+              Routes above Postgres, roughly parallel to Spark's data-plane arc. */}
+          <path d="M 260 460 C 400 430, 560 412, 660 350" stroke="var(--arch-edge-dim)" strokeWidth="1.5" strokeDasharray="5 4" fill="none" markerEnd="url(#arrow-dim)" />
+          <g>
+            <rect x="318" y="436" width="150" height="22" rx="11" fill="var(--arch-chip-bg)" stroke="var(--arch-chip-stroke)" />
+            <text x="393" y="452" textAnchor="middle" fontFamily="ui-monospace, monospace" fontSize="11" fill="var(--arch-chip-fg)">{flinkIo}</text>
+          </g>
+        </>
+      )}
     </svg>
   );
 }

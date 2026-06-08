@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, Fragment } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { STEPS } from "@/lib/steps";
@@ -41,9 +41,11 @@ export default function StepRail() {
     };
   }, [fetchCompletedSteps]);
 
-  // Calculate progress percentage
-  const totalDemoSteps = STEPS.length;
-  const completedDemoSteps = STEPS.filter(s => completedSteps.includes(s.id)).length;
+  // Progress counts the core demo only — the bonus Flink step is optional and
+  // shouldn't keep the bar from reaching 100%.
+  const coreSteps = STEPS.filter(s => !s.bonus);
+  const totalDemoSteps = coreSteps.length;
+  const completedDemoSteps = coreSteps.filter(s => completedSteps.includes(s.id)).length;
   const percent = totalDemoSteps > 0 ? (completedDemoSteps / totalDemoSteps) * 100 : 0;
 
   return (
@@ -77,8 +79,20 @@ export default function StepRail() {
             const completed = completedSteps.includes(s.id);
             const title = applyConfig(s.title, cfg);
 
+            // Separator between the main demo and the optional bonus step(s).
+            const divider = s.bonus ? (
+              <li className="!mt-4 pt-3 border-t border-ink-700/50 list-none">
+                <div className="flex items-center gap-2 px-2 text-[10px] font-bold uppercase tracking-wider text-emerald-400/70">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400/70" />
+                  Bonus · optional
+                </div>
+              </li>
+            ) : null;
+
             return (
-              <li key={s.id}>
+              <Fragment key={s.id}>
+              {divider}
+              <li>
                 <Link
                   href={`/step/${s.id}`}
                   className={`group flex items-start gap-3 rounded-md px-2 py-1.5 text-xs transition duration-200 ${
@@ -118,6 +132,7 @@ export default function StepRail() {
                   </div>
                 </Link>
               </li>
+              </Fragment>
             );
           })}
         </ol>

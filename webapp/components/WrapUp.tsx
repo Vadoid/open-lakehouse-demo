@@ -57,6 +57,7 @@ const COVERAGE: { feature: string; status: string; step: number | null }[] = [
   { feature: "Sort orders / clustering",              status: "✓",  step: 15 },
   { feature: "Perf payoff (manifest pruning)",        status: "✓",  step: 16 },
   { feature: "Z-order + Puffin theta sketches",       status: "✓",  step: 17 },
+  { feature: "Multi-engine streaming (Flink → Spark)", status: "✓ optional", step: 19 },
   { feature: "VARIANT",                               status: "skipped, needs Spark 4.0",  step: null },
   { feature: "Nanosecond timestamps",                 status: "skipped, needs Spark 4.0",  step: null },
   { feature: "Geometry / Geography",                  status: "skipped, needs Spark 4.0",  step: null },

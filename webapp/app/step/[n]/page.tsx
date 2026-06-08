@@ -4,6 +4,8 @@ import SqlPanel from "@/components/SqlPanel";
 import WhyPanel from "@/components/WhyPanel";
 import UnderHoodTabs from "@/components/UnderHoodTabs";
 import LineageGraph from "@/components/UnderHood/LineageGraph";
+import LiveStreamCount from "@/components/UnderHood/LiveStreamCount";
+import StreamDdl from "@/components/UnderHood/StreamDdl";
 import WrapUp from "@/components/WrapUp";
 import { resolveStepPrefix } from "@/lib/resolvePrefix";
 import { StepTitle, StepExpect } from "@/components/StepTitle";
@@ -28,6 +30,11 @@ export default async function StepPage({ params }: { params: Promise<{ n: string
             <StepTitle id={step.id} title={step.title} />
           </header>
           <SqlPanel step={step} />
+          {/* Flink interop step: live count of the streamed table, climbing
+              while Flink writes. Gated/explained inside the widget. The DDL panel
+              below shows the V3 table + datagen INSERT the stream runs (read-only). */}
+          {step.inspect.stream && <LiveStreamCount />}
+          {step.inspect.stream && <StreamDdl />}
         </section>
 
         {/* Right Column - Why, Expected Outcome, and Metadata Tabs */}

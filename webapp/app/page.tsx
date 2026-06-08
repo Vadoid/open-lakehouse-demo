@@ -33,18 +33,34 @@ const PHASES = [
     title: "Phase 6: Sort Orders, Compaction & Metadata Statistics",
     steps: [15, 16, 17, 18],
   },
+  {
+    title: "Phase 7: Multi-engine streaming interop (optional Flink)",
+    steps: [19],
+  },
 ];
+
+// The wrap-up is a flagged step, not necessarily the last one (the optional
+// Flink bonus step sits after it). Locate it by flag so "Skip to wrap-up" never
+// points at the streaming step by accident.
+const WRAPUP_ID = STEPS.find((s) => s.wrapup)?.id ?? STEPS.length;
 
 export default function Home() {
   const [cfg, setCfg] = useState<DemoConfig>(DEFAULT_CONFIG);
   const [isGcs, setIsGcs] = useState(false);
   const [bucket, setBucket] = useState("warehouse");
+  // Flink ships on by default but can be opted out (Spark-only); only show its
+  // UI link when the engine is actually deployed.
+  const [flinkEnabled, setFlinkEnabled] = useState(false);
 
   useEffect(() => {
     setCfg(loadConfig());
     fetch("/api/storage-setup")
       .then((r) => r.json())
       .then((j) => { setIsGcs(j.type === "gcs"); if (j.bucket) setBucket(j.bucket); })
+      .catch(() => {});
+    fetch("/api/stream-count")
+      .then((r) => r.json())
+      .then((j) => setFlinkEnabled(!!j.enabled))
       .catch(() => {});
   }, []);
 
@@ -234,7 +250,7 @@ export default function Home() {
           </Link>
           <span className="mx-1 h-6 w-px bg-ink-700" aria-hidden="true" />
           <Link
-            href={`/step/${STEPS.length}`}
+            href={`/step/${WRAPUP_ID}`}
             className="px-3.5 py-2.5 rounded-lg border border-ink-700 text-xs text-gray-300 hover:border-ice-500/40 hover:text-ice-200 transition"
           >
             Skip to wrap-up
@@ -251,6 +267,17 @@ export default function Home() {
           >
             Lakekeeper UI ↗
           </DynamicLink>
+          {flinkEnabled && (
+            <DynamicLink
+              port={8081}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-3 py-2 rounded-lg border border-ink-700 text-[11px] text-gray-400 hover:border-emerald-500/40 hover:text-emerald-200 transition"
+              title="Flink job dashboard — no login required"
+            >
+              Flink UI ↗
+            </DynamicLink>
+          )}
           {isGcs ? (
             <a
               href={`https://console.cloud.google.com/storage/browser/${bucket}`}
