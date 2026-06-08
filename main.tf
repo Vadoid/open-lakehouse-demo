@@ -367,6 +367,11 @@ resource "docker_container" "webapp" {
     "MINIO_BUCKET=${var.bucket}",
     "HOST_SUFFIX=${local.host_suffix}",
     "STATE_DIR=/data",
+    # Lets the webapp's step-19 interop widget distinguish "Flink not deployed"
+    # from "Flink up but no rows yet". Tracks the same var that gates the Flink
+    # containers, so toggling enable_flink recreates the webapp with the right
+    # flag.
+    "FLINK_ENABLED=${var.enable_flink ? "1" : "0"}",
   ]
 
   # Persist the chosen storage config (incl. GCS SA key) across container

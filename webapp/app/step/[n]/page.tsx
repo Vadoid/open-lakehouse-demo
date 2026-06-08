@@ -4,6 +4,7 @@ import SqlPanel from "@/components/SqlPanel";
 import WhyPanel from "@/components/WhyPanel";
 import UnderHoodTabs from "@/components/UnderHoodTabs";
 import LineageGraph from "@/components/UnderHood/LineageGraph";
+import LiveStreamCount from "@/components/UnderHood/LiveStreamCount";
 import WrapUp from "@/components/WrapUp";
 import { resolveStepPrefix } from "@/lib/resolvePrefix";
 import { StepTitle, StepExpect } from "@/components/StepTitle";
@@ -28,6 +29,9 @@ export default async function StepPage({ params }: { params: Promise<{ n: string
             <StepTitle id={step.id} title={step.title} />
           </header>
           <SqlPanel step={step} />
+          {/* Flink interop step: live count of the streamed table, climbing
+              while Flink writes. Gated/explained inside the widget. */}
+          {step.inspect.stream && <LiveStreamCount />}
         </section>
 
         {/* Right Column - Why, Expected Outcome, and Metadata Tabs */}

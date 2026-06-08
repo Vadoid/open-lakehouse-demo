@@ -33,7 +33,16 @@ const PHASES = [
     title: "Phase 6: Sort Orders, Compaction & Metadata Statistics",
     steps: [15, 16, 17, 18],
   },
+  {
+    title: "Phase 7: Multi-engine streaming interop (optional Flink)",
+    steps: [19],
+  },
 ];
+
+// The wrap-up is a flagged step, not necessarily the last one (the optional
+// Flink bonus step sits after it). Locate it by flag so "Skip to wrap-up" never
+// points at the streaming step by accident.
+const WRAPUP_ID = STEPS.find((s) => s.wrapup)?.id ?? STEPS.length;
 
 export default function Home() {
   const [cfg, setCfg] = useState<DemoConfig>(DEFAULT_CONFIG);
@@ -234,7 +243,7 @@ export default function Home() {
           </Link>
           <span className="mx-1 h-6 w-px bg-ink-700" aria-hidden="true" />
           <Link
-            href={`/step/${STEPS.length}`}
+            href={`/step/${WRAPUP_ID}`}
             className="px-3.5 py-2.5 rounded-lg border border-ink-700 text-xs text-gray-300 hover:border-ice-500/40 hover:text-ice-200 transition"
           >
             Skip to wrap-up

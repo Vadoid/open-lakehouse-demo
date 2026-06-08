@@ -12,6 +12,9 @@ export type Step = {
     catalog?: { table?: string };
     snapshots?: { table: string };
     lineage?: { table: string };
+    // Present only on the Flink interop step: renders the live row-count widget
+    // (LiveStreamCount) that polls the Flink-written table and shows it growing.
+    stream?: { table: string };
   };
   // When true, step page renders the wrap-up template instead of the
   // SQL/why/under-hood three-pane layout.
@@ -664,6 +667,32 @@ ORDER BY record_count DESC LIMIT 10;`,
     expect: "",
     inspect: {},
     wrapup: true,
+  },
+  {
+    id: 19,
+    title: "Multi-engine streaming (Flink)",
+    why: `**Bonus — optional Flink streaming engine.** Everything up to here ran on **Spark** (batch). This step shows a *second* engine, **Apache Flink**, writing into the **same Iceberg catalog** Spark reads — multi-engine interop on one source of truth.
+
+**What Flink is doing.** A continuous Flink job generates synthetic trades (a \`datagen\` source) and appends them to \`demo.market.trades_stream\` through an Iceberg sink. The sink commits a new snapshot **on every checkpoint (~10s)**, so the table grows in visible bursts. Run the \`count(*)\` below twice, a few seconds apart — the number climbs. The live tile on the right polls it for you.
+
+**Why this is a separate engine, not a Spark/Flink toggle.** The two are *not* interchangeable. This demo's batch script (steps 1–17) is Spark-dialect: \`MERGE INTO\`, the \`range()\` table function, \`CALL\` maintenance procedures, Spark DDL — none of which exist in Flink SQL. So Flink can't *replace* Spark without dropping half the V3 features. It's **additive**: Spark stays the batch showcase; Flink adds the thing batch can't show — a long-running append stream.
+
+**The interop proof.** One Lakekeeper REST catalog, one MinIO bucket, two engines. Flink writes; Spark (this query) reads the identical table. Neither knows about the other — they only share the catalog. That is exactly how an open lakehouse decouples storage from compute.
+
+**Format note.** \`trades_stream\` is **format-version 2, append-only**. Flink's Iceberg sink lags Spark on V3 writes (deletion vectors, row lineage), so the streaming table stays on safe V2 appends. Spark reads V2 and V3 tables identically, so the interop is unaffected.
+
+> Requires the optional Flink engine. If you deployed Spark-only, the tile on the right explains how to redeploy with Flink (\`./deploy.sh\` → option 2).`,
+    sql: `-- Flink is appending to this table continuously; Spark reads the same
+-- catalog. Run this a few times — the count climbs (Flink writes, Spark reads).
+SELECT count(*) AS row_count FROM demo.market.trades_stream;`,
+    expect: "row_count is non-zero and grows on each run while the Flink job streams (≈500 rows / 10s checkpoint at the default rows-per-second). The right-hand tile polls the same count live. Spark-only deploy: the table won't exist — see the tile for how to add Flink.",
+    inspect: {
+      stream: { table: "trades_stream" },
+      catalog: { table: "trades_stream" },
+      snapshots: { table: "trades_stream" },
+      lineage: { table: "trades_stream" },
+      minio: { table: "trades_stream", hint: "Flink writes Parquet data files + manifests here, a new snapshot per checkpoint (~10s). No Puffin — append-only V2." },
+    },
   },
 ];
 
