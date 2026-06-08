@@ -675,7 +675,7 @@ ORDER BY record_count DESC LIMIT 10;`,
     id: 19,
     bonus: true,
     title: "Multi-engine streaming (Flink)",
-    why: `**Bonus — optional Flink streaming engine.** Everything up to here ran on **Spark** (batch). This step shows a *second* engine, **Apache Flink**, writing into the **same Iceberg catalog** Spark reads — multi-engine interop on one source of truth. Expand a section below for the details.
+    why: `**Bonus, optional Flink streaming engine.** Everything up to here ran on **Spark** (batch). This step shows a *second* engine, **Apache Flink**, writing into the **same Iceberg catalog** Spark reads, multi-engine interop on one source of truth. Expand a section below for the details.
 
 > Requires the optional Flink engine. If you deployed Spark-only, the tile on the right explains how to redeploy with Flink (\`./deploy.sh\` → option 2).
 
@@ -686,24 +686,24 @@ A continuous Flink job generates synthetic trades (a \`datagen\` source) and app
 The stream doesn't run on deploy. Click **▶ Start streaming** on the live tile to the right; the Flink jobmanager submits the job and the count starts climbing every checkpoint. Run the \`count(*)\` below twice a few seconds apart and the number moves. (The same tile has a Stop button.)
 
 ## Why a separate engine, not a Spark/Flink toggle
-The two are *not* interchangeable. This demo's batch script (steps 1–17) is Spark-dialect: \`MERGE INTO\`, the \`range()\` table function, \`CALL\` maintenance procedures, Spark DDL — none of which exist in Flink SQL. So Flink can't *replace* Spark without dropping half the V3 features. It's **additive**: Spark stays the batch showcase; Flink adds the thing batch can't show — a long-running append stream.
+The two are *not* interchangeable. This demo's batch script (steps 1–17) is Spark-dialect: \`MERGE INTO\`, the \`range()\` table function, \`CALL\` maintenance procedures, Spark DDL, none of which exist in Flink SQL. So Flink can't *replace* Spark without dropping half the V3 features. It's **additive**: Spark stays the batch showcase; Flink adds the thing batch can't show, a long-running append stream.
 
 ## The interop proof
-One Lakekeeper REST catalog, one MinIO bucket, two engines. Flink writes; Spark (these queries) reads the identical table. Neither knows about the other — they only share the catalog. That is exactly how an open lakehouse decouples storage from compute.
+One Lakekeeper REST catalog, one MinIO bucket, two engines. Flink writes; Spark (these queries) reads the identical table. Neither knows about the other, they only share the catalog. That is exactly how an open lakehouse decouples storage from compute.
 
-## Append-only — why a new snapshot every ~10s
-Iceberg is snapshot-based and immutable: a commit only **adds** files, never edits them in place. The Flink sink commits **once per checkpoint** (\`flink/config.yaml\`, \`interval: 10s\`), so every ~10s you get a fresh data parquet + a manifest (\`*-m0.avro\`) + a manifest-list (\`snap-*.avro\`) + a new \`metadata.json\` — old files untouched. \`parallelism.default: 1\` means one data file per commit, so the small files pile up one-per-checkpoint.
+## Append-only, why a new snapshot every ~10s
+Iceberg is snapshot-based and immutable: a commit only **adds** files, never edits them in place. The Flink sink commits **once per checkpoint** (\`flink/config.yaml\`, \`interval: 10s\`), so every ~10s you get a fresh data parquet + a manifest (\`*-m0.avro\`) + a manifest-list (\`snap-*.avro\`) + a new \`metadata.json\`, old files untouched. \`parallelism.default: 1\` means one data file per commit, so the small files pile up one-per-checkpoint.
 
-**MoR vs CoW isn't exercised here.** \`trades_stream\` sets only \`'format-version' = '3'\` — no \`write.{delete,update,merge}.mode\` — and the stream is append-only, so there are no deletes or updates to resolve: no deletion vectors, no copy-on-write rewrites. Contrast the batch \`trades_v3\` (\`sql/demo.sql\`), explicitly \`merge-on-read\` with deletion vectors. The pile-up is plain append cadence, not a write-mode choice — queries #8–#10 below show the fix.
+**MoR vs CoW isn't exercised here.** \`trades_stream\` sets only \`'format-version' = '3'\`, no \`write.{delete,update,merge}.mode\`, and the stream is append-only, so there are no deletes or updates to resolve: no deletion vectors, no copy-on-write rewrites. Contrast the batch \`trades_v3\` (\`sql/demo.sql\`), explicitly \`merge-on-read\` with deletion vectors. The pile-up is plain append cadence, not a write-mode choice, queries #8–#10 below show the fix.
 
 ## Try the sample queries
-Queries #1–#7 run on **Spark over the live Flink stream**, so re-run any of them a few seconds apart and the numbers move. Past the \`count(*)\` interop proof you get a per-symbol leaderboard, tumbling-window volume buckets, **1-minute OHLC candlesticks rebuilt in plain Spark SQL** (#5), and a snapshots query (#6) that exposes Flink's commit cadence: one snapshot per ~10s checkpoint. Run all, or highlight one statement and Run just that. (#8–#10 are batch maintenance, not stream reads — see **Compaction**.)
+Queries #1–#7 run on **Spark over the live Flink stream**, so re-run any of them a few seconds apart and the numbers move. Past the \`count(*)\` interop proof you get a per-symbol leaderboard, tumbling-window volume buckets, **1-minute OHLC candlesticks rebuilt in plain Spark SQL** (#5), and a snapshots query (#6) that exposes Flink's commit cadence: one snapshot per ~10s checkpoint. Run all, or highlight one statement and Run just that. (#8–#10 are batch maintenance, not stream reads, see **Compaction**.)
 
-## Stream ⨝ batch — the temporal join (#7)
+## Stream ⨝ batch, the temporal join (#7)
 The Flink stream emits the same eight tickers (\`AAPL, MSFT, NVDA, …\`) the batch table \`trades_v3\` uses in step 1, so query #7 can **join the live stream's last two minutes against that static table** on the shared symbol and show live-vs-historical price drift. One engine writes the stream, another wrote the batch table, and Spark joins them on one catalog. (Needs step 1's \`trades_v3\`; on a fresh catalog that statement errors until you run step 1.)
 
 ## Compaction
-The append-per-checkpoint cadence leaves many tiny data files. Query #8 counts them (the \`.files\` metadata table); #9 runs Spark's \`rewrite_data_files\` maintenance procedure on the Flink-written table (same catalog — no Flink involvement) to coalesce them into fewer, larger files; #10 re-counts and the number drops. **Stop the stream first** — a live Flink commit racing the rewrite triggers a concurrent-commit retry.
+The append-per-checkpoint cadence leaves many tiny data files. Query #8 counts them (the \`.files\` metadata table); #9 runs Spark's \`rewrite_data_files\` maintenance procedure on the Flink-written table (same catalog, no Flink involvement) to coalesce them into fewer, larger files; #10 re-counts and the number drops. **Stop the stream first**, a live Flink commit racing the rewrite triggers a concurrent-commit retry.
 
 ## Format note
 \`trades_stream\` is **format-version 3, append-only**, the same V3 line as the rest of the demo. Flink writes it and Spark reads back V3 **row lineage**: every row carries a \`_row_id\` and \`_last_updated_sequence_number\` the sink assigned. Since it only appends, there are no deletion vectors here; Flink equality-delete upserts on a V3 stream are still a stretch goal.
@@ -795,7 +795,15 @@ CALL demo.system.rewrite_data_files(
 
 -- 10. Far fewer, larger data files after compaction.
 SELECT count(*) AS data_files FROM demo.market.trades_stream.files;`,
-    expect: "First click ▶ Start streaming on the right-hand tile (the stream is off until you start it). Then: run all, or select one statement and Run. Results change every run while Flink streams (≈500 rows / 10s checkpoint at the default rows-per-second). #5 reconstructs OHLC candlesticks from raw trades; #6 exposes Flink's checkpoint-driven commit cadence — a fresh committed_at every ~10s; #7 joins the live stream to the static trades_v3 batch table on the shared ticker (run step 1 first, or that one query errors). #8–#10 demonstrate compaction: #8 shows many small data files (one per ~10s checkpoint), #9 runs rewrite_data_files to coalesce them, #10 shows the count drop — STOP the stream before #9, or a concurrent Flink commit makes the rewrite retry/fail. Spark-only deploy: the table won't exist — see the tile for how to add Flink.",
+    expect: `First click **▶ Start streaming** on the right-hand tile (the stream is off until you start it). Then run all, or select one statement and Run. Results change on every run while Flink streams (≈500 rows per 10s checkpoint at the default rows-per-second).
+
+What each query shows:
+- **#5** reconstructs OHLC candlesticks from raw trades.
+- **#6** exposes Flink's checkpoint-driven commit cadence: a fresh \`committed_at\` every ~10s.
+- **#7** joins the live stream to the static \`trades_v3\` batch table on the shared ticker. Run step 1 first, or that one query errors.
+- **#8 to #10** demonstrate compaction. #8 shows many small data files (one per ~10s checkpoint), #9 runs \`rewrite_data_files\` to coalesce them, #10 shows the count drop. **Stop the stream before #9**, or a concurrent Flink commit makes the rewrite retry or fail.
+
+**Spark-only deploy:** the table won't exist. See the tile for how to add Flink.`,
     inspect: {
       stream: { table: "trades_stream" },
       catalog: { table: "trades_stream" },

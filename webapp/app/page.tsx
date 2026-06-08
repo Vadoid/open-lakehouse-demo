@@ -282,7 +282,7 @@ export default function Home() {
                             {applyConfig(step.title, cfg)}
                           </h4>
                           <p className="text-[11px] text-gray-400 leading-snug line-clamp-2">
-                            {sId === 18 ? "Live counters, matrix check, production review checklist" : applyConfig(step.why, cfg).replace(/##.*/g, "").trim().slice(0, 100)}...
+                            {sId === 18 ? "Live counters, matrix check, production review checklist" : applyConfig(step.why, cfg).replace(/##.*/g, "").replace(/[*`_>]/g, "").replace(/\s*—\s*/g, ", ").replace(/\s+/g, " ").trim().slice(0, 100)}...
                           </p>
                         </div>
                       </Link>
