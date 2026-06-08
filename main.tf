@@ -245,9 +245,12 @@ resource "docker_image" "flink" {
 locals {
   # Jar staging idiom mirrors spark_thrift's: curl the Iceberg (+ Hadoop) jars
   # into /opt/flink/lib (Flink's system classloader) at container start, guarded
-  # by an existence check so a restart doesn't re-download. Three jars:
+  # by an existence check so a restart doesn't re-download. Four jars:
   #   - iceberg-flink-runtime-1.20  : Iceberg sink/catalog for Flink 1.20
   #   - iceberg-aws-bundle          : S3FileIO for MinIO (same bundle Spark uses)
+  #   - iceberg-gcp-bundle          : GCSFileIO for a GCS warehouse (same bundle
+  #     Spark stages). ResolvingFileIO picks S3 vs GCS by URI scheme, so both
+  #     bundles must be present to support either storage target.
   #   - flink-shaded-hadoop-2-uber  : REQUIRED. iceberg-flink-runtime does NOT
   #     shade Hadoop and the flink image ships none, so CREATE CATALOG throws
   #     ClassNotFoundException: org.apache.hadoop.conf.Configuration without it.
@@ -264,6 +267,7 @@ locals {
     }
     fetch iceberg-flink-runtime-$${FLINK_MINOR}-$${ICEBERG_VER}.jar $${ICE_MAVEN}/iceberg-flink-runtime-$${FLINK_MINOR}/$${ICEBERG_VER}/iceberg-flink-runtime-$${FLINK_MINOR}-$${ICEBERG_VER}.jar
     fetch iceberg-aws-bundle-$${ICEBERG_VER}.jar $${ICE_MAVEN}/iceberg-aws-bundle/$${ICEBERG_VER}/iceberg-aws-bundle-$${ICEBERG_VER}.jar
+    fetch iceberg-gcp-bundle-$${ICEBERG_VER}.jar $${ICE_MAVEN}/iceberg-gcp-bundle/$${ICEBERG_VER}/iceberg-gcp-bundle-$${ICEBERG_VER}.jar
     fetch $${HADOOP_UBER}.jar $${FLINK_MAVEN}/$${HADOOP_UBER}.jar
   EOT
 }
@@ -288,15 +292,124 @@ resource "docker_container" "flink_jobmanager" {
     container_path = "/opt/flink/conf/config.yaml"
     read_only      = true
   }
-  # stream.sql — submitted by deploy.sh via sql-client.sh -f.
+  # stream.sql — submitted by the resubmit supervisor via sql-client.sh -f.
   volumes {
     host_path      = abspath("${path.module}/flink/sql")
     container_path = "/opt/flink/sql"
     read_only      = true
   }
+  # Shared control channel with the webapp (same host dir the webapp mounts at
+  # /data). The streaming job does NOT start on its own — the bonus-screen "Start
+  # streaming" button writes a flag file here, and the supervisor only submits
+  # the stream while that flag exists. This is the only way the webapp (which
+  # can't docker-exec and has no Flink SQL gateway) can ask the cluster to run.
+  volumes {
+    host_path      = abspath("${path.module}/.demo-state")
+    container_path = "/control"
+  }
+  # Stage the Iceberg jars, then start the jobmanager UNDER a resubmit supervisor
+  # (mirrors spark-thrift's PID-watch supervisor above).
+  #
+  # WHY a supervisor: (1) the stream is user-triggered — it must NOT start on
+  # deploy, only when the bonus-screen "Start streaming" button arms a shared flag
+  # file; the webapp can't docker-exec and there's no Flink SQL gateway, so the
+  # supervisor is the only thing that can submit the SQL. (2) The webapp lets the
+  # user switch the storage target (MinIO <-> GCS) at runtime, which DROPs and
+  # re-registers the Lakekeeper warehouse (webapp/app/api/storage-setup/route.ts),
+  # killing the long-running INSERT. The supervisor reruns the idempotent
+  # stream.sql whenever it is ARMED and no job is live, so the stream both starts
+  # on demand and self-heals against whatever warehouse is currently registered
+  # (stream.sql's CREATE DATABASE/TABLE IF NOT EXISTS recreate the table on a
+  # freshly-registered warehouse, on MinIO or GCS).
+  #
+  # This depends on flink/config.yaml's bounded restart-strategy: a job whose
+  # table was dropped must exhaust retries and reach terminal FAILED so the
+  # supervisor sees "no live job" and resubmits. With unbounded retries it would
+  # loop RESTARTING forever and never resubmit.
   command = [
     "/bin/bash", "-c",
-    "${local.flink_jar_stage}\n/opt/flink/bin/jobmanager.sh start-foreground",
+    <<-EOT
+      ${local.flink_jar_stage}
+      # Start the JM as a background daemon so this script (container PID 1) stays
+      # in the foreground as the supervisor. (start-foreground would block here.)
+      /opt/flink/bin/jobmanager.sh start
+      # Capture the JM JVM pid; jobmanager.sh forks the JVM, so race the fork like
+      # the spark block races its pgrep.
+      JM_PID=""
+      for _ in $(seq 1 30); do
+        JM_PID=$(pgrep -f StandaloneSessionClusterEntrypoint | head -1)
+        [ -n "$JM_PID" ] && break
+        sleep 1
+      done
+      if [ -z "$JM_PID" ]; then echo ">> jobmanager JVM failed to start; bailing"; exit 1; fi
+      echo ">> supervising jobmanager JVM PID $JM_PID"
+      # Keep `docker logs flink-jobmanager` useful (troubleshooting docs lean on it).
+      tail -F /opt/flink/log/*.log 2>/dev/null &
+      TAIL_PID=$!
+      # Wait for a taskmanager to register before the first submit.
+      echo ">> waiting for a taskmanager to register"
+      for _ in $(seq 1 60); do
+        curl -s localhost:8081/overview 2>/dev/null | grep -q '"taskmanagers":[1-9]' && break
+        sleep 2
+      done
+      # Shared control flag with the webapp. The stream is OFF until the bonus
+      # screen's "Start streaming" button writes this file. /control is a bind
+      # mount of the host .demo-state dir (also the webapp's /data), so the flag
+      # the webapp touches at /data/flink-stream.on appears here. chmod is
+      # defensive — both containers run as root, so this normally no-ops.
+      STREAM_FLAG=/control/flink-stream.on
+      mkdir -p /control 2>/dev/null || true
+      chmod 777 /control 2>/dev/null || true
+      echo ">> supervisor ready — stream stays OFF until the webapp arms $STREAM_FLAG"
+      # ---- resubmit supervisor loop ----
+      backoff=15
+      while true; do
+        # JM liveness: if the JVM died, exit so docker restart=unless-stopped revives us.
+        if ! kill -0 "$JM_PID" 2>/dev/null; then
+          echo ">> jobmanager JVM PID $JM_PID exited; restarting container"
+          kill "$TAIL_PID" 2>/dev/null || true
+          exit 1
+        fi
+        # Is any job live? Parse /jobs ("status" field) with grep/tr/case — the
+        # flink image has NO python3. Terminal = FAILED/FINISHED/CANCELED; anything
+        # else (RUNNING/RESTARTING/CREATED/RECONCILING/INITIALIZING/...) counts as
+        # live, so we never double-submit during a job's own startup.
+        alive=0
+        for st in $(curl -s localhost:8081/jobs 2>/dev/null | grep -o '"status":"[A-Z]*"' | grep -oE '[A-Z]+'); do
+          case "$st" in
+            FAILED|FINISHED|CANCELED) ;;
+            *) alive=1 ;;
+          esac
+        done
+        if [ "$alive" = "1" ]; then
+          # A job is running. Hold at the slow cadence — but if the flag was
+          # cleared (Stop button), the webapp also cancels the job via REST, so
+          # the job will go terminal and we'll fall through next pass.
+          backoff=15
+          sleep 15
+          continue
+        fi
+        # No live job. Only (re)submit when armed by the webapp; otherwise idle,
+        # polling fast so the button-to-stream latency stays low (~3s).
+        if [ ! -f "$STREAM_FLAG" ]; then
+          sleep 3
+          continue
+        fi
+        # Armed + no live job -> (re)submit. This both starts the stream on the
+        # first button press and SELF-HEALS it afterward: if the webapp's runtime
+        # storage switch drops the warehouse and kills the job, the flag stays on
+        # so we resubmit against the freshly-registered warehouse. sql-client.sh -f
+        # exits 0 EVEN WHEN a statement fails (e.g. the warehouse is momentarily
+        # absent in the DELETE/re-register window), so we DON'T trust its exit
+        # code: the next loop's job-state poll is the real success signal. On
+        # consecutive misses, back off (15->30->60s cap) to wait out that window.
+        echo ">> armed and no live job — submitting stream.sql"
+        /opt/flink/bin/sql-client.sh -f /opt/flink/sql/stream.sql || true
+        sleep "$backoff"
+        if [ "$backoff" -lt 60 ]; then backoff=$((backoff * 2)); [ "$backoff" -gt 60 ] && backoff=60; fi
+      done
+    EOT
+    ,
   ]
   restart = "unless-stopped"
 }
@@ -372,6 +485,8 @@ resource "docker_container" "webapp" {
     # containers, so toggling enable_flink recreates the webapp with the right
     # flag.
     "FLINK_ENABLED=${var.enable_flink ? "1" : "0"}",
+    # Jobmanager REST base — the step-19 Stop button cancels the running job here.
+    "FLINK_URL=http://flink-jobmanager:8081",
   ]
 
   # Persist the chosen storage config (incl. GCS SA key) across container

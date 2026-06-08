@@ -12,14 +12,20 @@ SET 'execution.runtime-mode' = 'streaming';
 
 -- ---------------------------------------------------------------------------
 -- The shared catalog. Points at the very same Lakekeeper REST endpoint and
--- MinIO bucket as spark/spark-defaults.conf — that shared target IS the interop
+-- object store as spark/spark-defaults.conf — that shared target IS the interop
 -- story. 'catalog-type'='rest' is the iceberg-flink-runtime-1.20 form for a
 -- REST catalog (equivalent to catalog-impl=org.apache.iceberg.rest.RESTCatalog).
 --
--- S3FileIO with static MinIO creds: unlike Spark (which uses ResolvingFileIO +
--- Lakekeeper credential vending for its GCS path), this demo's Flink writes only
--- to MinIO, so static S3 creds are simplest and correct. 'token'='dummy' mirrors
--- Spark — harmless under Lakekeeper's allow-all authz.
+-- io-impl is ResolvingFileIO, mirroring Spark: it dispatches by URI scheme —
+-- s3:// -> S3FileIO (MinIO, using the static s3.* creds below), gs:// -> GCSFileIO
+-- (GCS). This is what lets Flink run against EITHER a MinIO or a GCS warehouse,
+-- whichever the webapp registered. For gs:// the s3.* options are simply ignored.
+--
+-- GCS creds are NOT static (entered at runtime in the webapp, never reach this
+-- container). Like Spark, Lakekeeper vends a per-table downscoped gcs.oauth2 token
+-- in the REST load-table response; rest.access-delegation + the header tell the
+-- Iceberg REST client to ask for it (the header form is the reliable cross-version
+-- trigger). 'token'='dummy' mirrors Spark — harmless under allow-all authz.
 -- ---------------------------------------------------------------------------
 CREATE CATALOG demo WITH (
   'type'='iceberg',
@@ -27,7 +33,9 @@ CREATE CATALOG demo WITH (
   'uri'='http://lakekeeper:8181/catalog',
   'warehouse'='demo',
   'token'='dummy',
-  'io-impl'='org.apache.iceberg.aws.s3.S3FileIO',
+  'io-impl'='org.apache.iceberg.io.ResolvingFileIO',
+  'rest.access-delegation'='true',
+  'header.X-Iceberg-Access-Delegation'='vended-credentials',
   's3.endpoint'='http://lake-minio:9000',
   's3.path-style-access'='true',
   's3.access-key-id'='minio-admin',
@@ -40,12 +48,13 @@ CREATE CATALOG demo WITH (
 CREATE DATABASE IF NOT EXISTS demo.market;
 
 -- ---------------------------------------------------------------------------
--- The Iceberg sink table.
+-- The Iceberg sink table — format-version 3, append-only.
 --
--- format-version 2, append-only: Flink's Iceberg sink lags Spark on V3 writes
--- (deletion vectors, row lineage). A V3 streaming table + equality-delete
--- upserts is a stretch goal; v1 stays on V2 appends to stay safe. Spark reads
--- V2 and V3 tables identically, so the interop check is unaffected.
+-- V3 to match the rest of the demo (Spark writes V3 everywhere). Appends don't
+-- need V3's deletion vectors; what V3 gives a pure append stream is row lineage
+-- (_row_id / _last_updated_sequence_number auto-assigned per row), which Spark
+-- can then read back. Equality-delete upserts on a V3 stream remain a stretch
+-- goal. Spark reads V2 and V3 identically, so interop is unaffected either way.
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS demo.market.trades_stream (
   trade_id BIGINT,
@@ -53,7 +62,7 @@ CREATE TABLE IF NOT EXISTS demo.market.trades_stream (
   price    DOUBLE,
   qty      INT,
   ts       TIMESTAMP(6)
-) WITH ('format-version'='2');
+) WITH ('format-version'='3');
 
 -- ---------------------------------------------------------------------------
 -- datagen source: Flink's built-in synthetic row generator. No external system
@@ -65,16 +74,22 @@ CREATE TABLE IF NOT EXISTS demo.market.trades_stream (
 -- NOT implicitly cast into the sink's plain TIMESTAMP(6) column — the INSERT
 -- fails type validation. CAST(LOCALTIMESTAMP AS TIMESTAMP(6)) matches the sink.
 -- ---------------------------------------------------------------------------
+-- symbol is NOT random text. datagen can't pick from an enum, so it generates a
+-- bounded integer sym_idx (0..7) and the INSERT maps it to one of the SAME eight
+-- tickers the batch table demo.market.trades_v3 uses (sql/demo.sql step 1). That
+-- shared symbol domain is what lets step 19's temporal-join query join the live
+-- stream against the static batch table on symbol.
 CREATE TEMPORARY TABLE src (
   trade_id BIGINT,
-  symbol   STRING,
+  sym_idx  INT,
   price    DOUBLE,
   qty      INT,
   ts AS CAST(LOCALTIMESTAMP AS TIMESTAMP(6))
 ) WITH (
   'connector'='datagen',
   'rows-per-second'='50',           -- throughput knob: raise to stress, lower to slow the climb
-  'fields.symbol.length'='4',       -- 4-char random tickers
+  'fields.sym_idx.min'='0',         -- index into the 8-ticker array in the INSERT below
+  'fields.sym_idx.max'='7',
   -- Bound the numeric fields. Without min/max, datagen fills each numeric across
   -- its ENTIRE type range — prices near 1e308, negative billion quantities — so
   -- aggregates overflow to null and the data looks nonsensical. Constrain to
@@ -90,6 +105,15 @@ CREATE TEMPORARY TABLE src (
 -- The long-running streaming INSERT. sql-client submits this to the session
 -- cluster and returns a job id (table.dml-sync defaults to false, so it does
 -- NOT block) — the job then runs indefinitely on the taskmanager, committing a
--- snapshot every checkpoint.
+-- snapshot every checkpoint. A CASE maps sym_idx 0..7 onto the eight tickers
+-- (the same set sql/demo.sql writes into trades_v3) — Flink-portable, no array
+-- indexing quirks.
 INSERT INTO demo.market.trades_stream
-  SELECT trade_id, symbol, price, qty, ts FROM src;
+  SELECT
+    trade_id,
+    CASE sym_idx
+      WHEN 0 THEN 'AAPL' WHEN 1 THEN 'MSFT' WHEN 2 THEN 'NVDA' WHEN 3 THEN 'AMZN'
+      WHEN 4 THEN 'GOOG' WHEN 5 THEN 'META' WHEN 6 THEN 'TSLA' ELSE 'AMD'
+    END AS symbol,
+    price, qty, ts
+  FROM src;

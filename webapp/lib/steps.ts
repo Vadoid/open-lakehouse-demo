@@ -677,25 +677,102 @@ ORDER BY record_count DESC LIMIT 10;`,
     title: "Multi-engine streaming (Flink)",
     why: `**Bonus — optional Flink streaming engine.** Everything up to here ran on **Spark** (batch). This step shows a *second* engine, **Apache Flink**, writing into the **same Iceberg catalog** Spark reads — multi-engine interop on one source of truth.
 
-**What Flink is doing.** A continuous Flink job generates synthetic trades (a \`datagen\` source) and appends them to \`demo.market.trades_stream\` through an Iceberg sink. The sink commits a new snapshot **on every checkpoint (~10s)**, so the table grows in visible bursts. Run the \`count(*)\` below twice, a few seconds apart — the number climbs. The live tile on the right polls it for you.
+**What Flink is doing.** A continuous Flink job generates synthetic trades (a \`datagen\` source) and appends them to \`demo.market.trades_stream\` through an Iceberg sink. The sink commits a new snapshot **on every checkpoint (~10s)**, so the table grows in visible bursts.
+
+**Start it first.** The stream doesn't run on deploy. Click **▶ Start streaming** on the live tile to the right; the Flink jobmanager submits the job and the count starts climbing every checkpoint. Run the \`count(*)\` below twice a few seconds apart and the number moves. (The same tile has a Stop button.)
 
 **Why this is a separate engine, not a Spark/Flink toggle.** The two are *not* interchangeable. This demo's batch script (steps 1–17) is Spark-dialect: \`MERGE INTO\`, the \`range()\` table function, \`CALL\` maintenance procedures, Spark DDL — none of which exist in Flink SQL. So Flink can't *replace* Spark without dropping half the V3 features. It's **additive**: Spark stays the batch showcase; Flink adds the thing batch can't show — a long-running append stream.
 
-**The interop proof.** One Lakekeeper REST catalog, one MinIO bucket, two engines. Flink writes; Spark (this query) reads the identical table. Neither knows about the other — they only share the catalog. That is exactly how an open lakehouse decouples storage from compute.
+**The interop proof.** One Lakekeeper REST catalog, one MinIO bucket, two engines. Flink writes; Spark (these queries) reads the identical table. Neither knows about the other — they only share the catalog. That is exactly how an open lakehouse decouples storage from compute.
 
-**Format note.** \`trades_stream\` is **format-version 2, append-only**. Flink's Iceberg sink lags Spark on V3 writes (deletion vectors, row lineage), so the streaming table stays on safe V2 appends. Spark reads V2 and V3 tables identically, so the interop is unaffected.
+**Try the sample queries.** All seven below run on **Spark over the live Flink stream**, so re-run any of them a few seconds apart and the numbers move. Past the \`count(*)\` interop proof you get a per-symbol leaderboard, tumbling-window volume buckets, **1-minute OHLC candlesticks rebuilt in plain Spark SQL** (#5), and a snapshots query (#6) that exposes Flink's commit cadence: one snapshot per ~10s checkpoint. Run all, or highlight one statement and Run just that.
+
+**Stream ⨝ batch — the temporal join (#7).** The Flink stream emits the same eight tickers (\`AAPL, MSFT, NVDA, …\`) the batch table \`trades_v3\` uses in step 1, so query #7 can **join the live stream's last two minutes against that static table** on the shared symbol and show live-vs-historical price drift. One engine writes the stream, another wrote the batch table, and Spark joins them on one catalog — exactly the lakehouse payoff. (Needs step 1's \`trades_v3\`; on a fresh catalog that statement errors until you run step 1.)
+
+**Format note.** \`trades_stream\` is **format-version 3, append-only**, the same V3 line as the rest of the demo. Flink writes it and Spark reads back V3 **row lineage**: every row carries a \`_row_id\` and \`_last_updated_sequence_number\` the sink assigned. Since it only appends, there are no deletion vectors here; Flink equality-delete upserts on a V3 stream are still a stretch goal.
+
+**Storage-agnostic, like Spark.** Flink uses the same \`ResolvingFileIO\` and Lakekeeper vended credentials as Spark, so the stream writes to either a **MinIO or a GCS** warehouse with no static GCS key in the container. Switch the storage target at runtime and the jobmanager's resubmit supervisor reruns the stream against the newly registered warehouse, so the count picks back up by itself.
 
 > Requires the optional Flink engine. If you deployed Spark-only, the tile on the right explains how to redeploy with Flink (\`./deploy.sh\` → option 2).`,
-    sql: `-- Flink is appending to this table continuously; Spark reads the same
--- catalog. Run this a few times — the count climbs (Flink writes, Spark reads).
-SELECT count(*) AS row_count FROM demo.market.trades_stream;`,
-    expect: "row_count is non-zero and grows on each run while the Flink job streams (≈500 rows / 10s checkpoint at the default rows-per-second). The right-hand tile polls the same count live. Spark-only deploy: the table won't exist — see the tile for how to add Flink.",
+    sql: `-- Spark reading the LIVE Flink stream. Run all, or select one statement and Run.
+-- Re-run while Flink streams — the numbers move.
+
+-- 1. Interop proof: Flink writes, Spark counts the same catalog table.
+SELECT count(*) AS row_count FROM demo.market.trades_stream;
+
+-- 2. Per-symbol leaderboard: who's trading, at what price, for how much notional.
+SELECT symbol,
+       count(*)                  AS trades,
+       round(avg(price), 2)      AS avg_price,
+       round(sum(price * qty), 0) AS notional
+FROM demo.market.trades_stream
+GROUP BY symbol
+ORDER BY trades DESC
+LIMIT 10;
+
+-- 3. Most recent trades the stream has committed.
+SELECT ts, symbol, price, qty
+FROM demo.market.trades_stream
+ORDER BY ts DESC
+LIMIT 15;
+
+-- 4. 10-second volume buckets — Spark tumbling-window aggregation over the stream.
+SELECT window.start AS bucket,
+       count(*)     AS trades,
+       sum(qty)     AS shares
+FROM demo.market.trades_stream
+GROUP BY window(ts, '10 seconds')
+ORDER BY bucket DESC
+LIMIT 12;
+
+-- 5. 1-minute OHLC candlesticks per symbol — reconstructed purely in Spark SQL.
+SELECT window.start          AS minute,
+       symbol,
+       min_by(price, ts)     AS open,
+       max(price)            AS high,
+       min(price)            AS low,
+       max_by(price, ts)     AS close,
+       sum(qty)              AS volume
+FROM demo.market.trades_stream
+GROUP BY window(ts, '1 minute'), symbol
+ORDER BY minute DESC, symbol
+LIMIT 20;
+
+-- 6. Flink commit cadence — one snapshot per ~10s checkpoint.
+SELECT committed_at,
+       summary['total-records'] AS total_rows,
+       summary['added-records'] AS added_this_commit
+FROM demo.market.trades_stream.snapshots
+ORDER BY committed_at DESC
+LIMIT 10;
+
+-- 7. Temporal join: the LIVE Flink stream (last 2 minutes) joined to the STATIC
+--    batch table from step 1, on the shared ticker. Needs step 1's trades_v3.
+SELECT live.symbol,
+       live.live_trades,
+       round(live.live_avg, 2)                  AS live_avg_price,
+       round(ref.batch_avg, 2)                  AS batch_avg_price,
+       round(live.live_avg - ref.batch_avg, 2)  AS drift
+FROM (
+  SELECT symbol, count(*) AS live_trades, avg(price) AS live_avg
+  FROM demo.market.trades_stream
+  WHERE ts >= current_timestamp() - INTERVAL 2 MINUTES   -- temporal window on the stream
+  GROUP BY symbol
+) live
+JOIN (
+  SELECT symbol, avg(price) AS batch_avg
+  FROM demo.market.trades_v3                              -- static table from step 1
+  GROUP BY symbol
+) ref
+  ON live.symbol = ref.symbol
+ORDER BY drift DESC;`,
+    expect: "First click ▶ Start streaming on the right-hand tile (the stream is off until you start it). Then: run all, or select one statement and Run. Results change every run while Flink streams (≈500 rows / 10s checkpoint at the default rows-per-second). #5 reconstructs OHLC candlesticks from raw trades; #6 exposes Flink's checkpoint-driven commit cadence — a fresh committed_at every ~10s; #7 joins the live stream to the static trades_v3 batch table on the shared ticker (run step 1 first, or that one query errors). Spark-only deploy: the table won't exist — see the tile for how to add Flink.",
     inspect: {
       stream: { table: "trades_stream" },
       catalog: { table: "trades_stream" },
       snapshots: { table: "trades_stream" },
       lineage: { table: "trades_stream" },
-      minio: { table: "trades_stream", hint: "Flink writes Parquet data files + manifests here, a new snapshot per checkpoint (~10s). No Puffin — append-only V2." },
+      minio: { table: "trades_stream", hint: "Flink writes Parquet data files + manifests here, a new snapshot per checkpoint (~10s). Format-version 3 (row lineage); no Puffin, since it's append-only." },
     },
   },
 ];

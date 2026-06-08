@@ -49,6 +49,21 @@ state:
     # checkpoint barriers, so no need for RocksDB/disk.
     type: hashmap
 
+# Bounded restart strategy. CRITICAL for the jobmanager resubmit supervisor
+# (main.tf flink_jobmanager command). With checkpointing ON and no
+# restart-strategy, Flink 1.20 defaults to effectively-unbounded retries, so a
+# job whose Iceberg table was dropped out from under it (the webapp DROPs +
+# re-registers the warehouse on a storage switch) loops in RESTARTING forever and
+# never reaches a terminal state — the supervisor's "all jobs terminal? resubmit"
+# check never fires and the stream wedges on the first GCS switch. fixed-delay/3
+# lets a persistently broken job exhaust retries and reach terminal FAILED, which
+# the supervisor detects and resubmits against the freshly-registered warehouse.
+restart-strategy:
+  type: fixed-delay
+  fixed-delay:
+    attempts: 3
+    delay: 10s
+
 # Java 17 module-access flags. CRITICAL: mounting this file REPLACES the image's
 # default /opt/flink/conf/config.yaml, which ships exactly these `--add-opens`/
 # `--add-exports`. Without them, Flink's Kryo/chill serializer can't reach

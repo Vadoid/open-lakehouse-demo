@@ -48,12 +48,19 @@ export default function Home() {
   const [cfg, setCfg] = useState<DemoConfig>(DEFAULT_CONFIG);
   const [isGcs, setIsGcs] = useState(false);
   const [bucket, setBucket] = useState("warehouse");
+  // Flink ships on by default but can be opted out (Spark-only); only show its
+  // UI link when the engine is actually deployed.
+  const [flinkEnabled, setFlinkEnabled] = useState(false);
 
   useEffect(() => {
     setCfg(loadConfig());
     fetch("/api/storage-setup")
       .then((r) => r.json())
       .then((j) => { setIsGcs(j.type === "gcs"); if (j.bucket) setBucket(j.bucket); })
+      .catch(() => {});
+    fetch("/api/stream-count")
+      .then((r) => r.json())
+      .then((j) => setFlinkEnabled(!!j.enabled))
       .catch(() => {});
   }, []);
 
@@ -260,6 +267,17 @@ export default function Home() {
           >
             Lakekeeper UI ↗
           </DynamicLink>
+          {flinkEnabled && (
+            <DynamicLink
+              port={8081}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-3 py-2 rounded-lg border border-ink-700 text-[11px] text-gray-400 hover:border-emerald-500/40 hover:text-emerald-200 transition"
+              title="Flink job dashboard — no login required"
+            >
+              Flink UI ↗
+            </DynamicLink>
+          )}
           {isGcs ? (
             <a
               href={`https://console.cloud.google.com/storage/browser/${bucket}`}
