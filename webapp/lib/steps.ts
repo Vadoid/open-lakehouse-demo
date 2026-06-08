@@ -27,8 +27,9 @@ export type Step = {
 // SQL + title strings carry placeholders:
 //   {{ROWS}}        — row count (formatted in titles, raw int in SQL)
 //   {{ROWS_COMMA}}  — comma-grouped row count for prose
-//   {{SECONDS}}     — days * 86400, for timestamp_seconds()
-//   {{DAYS}}        — day count for prose
+//   {{SECONDS}}     — days * 86400 (still substituted; no longer used in SQL)
+//   {{DAYS}}        — day count; drives both prose and the ts day-bucket in the
+//                    INSERT (pmod(id, {{DAYS}}) pins each row to one of N days)
 // Resolved at render via lib/demoConfig.applyConfig().
 
 export const STEPS: Step[] = [
@@ -102,7 +103,7 @@ SELECT
   id AS trade_id,
   element_at(array('AAPL','MSFT','NVDA','AMZN','GOOG','META','TSLA','AMD'),
              CAST(pmod(id, 8) AS INT) + 1) AS symbol,
-  timestamp_seconds(1700000000 + CAST(pmod(id, {{SECONDS}}) AS BIGINT)) AS ts,
+  timestamp_seconds(1699920000 + CAST(pmod(id, {{DAYS}}) AS BIGINT) * 86400 + CAST(pmod(id, 86400) AS BIGINT)) AS ts,
   round(50 + rand() * 500, 2) AS price,
   CAST(1 + rand() * 1000 AS INT) AS qty,
   CASE WHEN pmod(id, 2) = 0 THEN 'BUY' ELSE 'SELL' END AS side
@@ -499,7 +500,7 @@ SELECT
   ({{ROWS}} + id) AS trade_id,
   element_at(array('AAPL','MSFT','NVDA','AMZN','GOOG','META','TSLA','AMD'),
              CAST(pmod(id, 8) AS INT) + 1) AS symbol,
-  timestamp_seconds(1700000000 + CAST(pmod(id, {{SECONDS}}) AS BIGINT)) AS ts,
+  timestamp_seconds(1699920000 + CAST(pmod(id, {{DAYS}}) AS BIGINT) * 86400 + CAST(pmod(id, 86400) AS BIGINT)) AS ts,
   round(50 + rand() * 500, 2) AS price,
   CAST(1 + rand() * 1000 AS INT) AS quantity,
   'NASDAQ' AS exchange

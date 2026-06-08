@@ -6,10 +6,16 @@
 --     -u jdbc:hive2://localhost:10000 -f /opt/demo/demo.sql
 --
 -- HEAVY KNOB: change the upper bound of range(...) below. 1,000,000 is the
--- laptop-friendly default (matches the webapp's default demo config). The
--- second knob, the modulus on pmod(id, N), spreads rows across N seconds of
--- synthetic history; 30 days = 2592000 seconds. Bump rows to 50,000,000 with
--- spark.driver.memory=8g, or 500,000,000 to stress a beefier host.
+-- laptop-friendly default (matches the webapp's default demo config). Bump rows
+-- to 50,000,000 with spark.driver.memory=8g, or 500,000,000 to stress a beefier
+-- host.
+--
+-- The ts expression pins each row to one of 30 days: pmod(id, 30) picks the day
+-- (so every day-partition is populated regardless of row count) and pmod(id,
+-- 86400) spreads it within that day. Base 1699920000 = 2023-11-14 00:00:00 UTC
+-- (midnight) so day boundaries land cleanly on exactly 30 partitions. The old
+-- pmod(id, 2592000) only worked when rows >= 2.59M; below that it never wrapped
+-- and you got far fewer than 30 days.
 -- ============================================================================
 
 CREATE NAMESPACE IF NOT EXISTS demo.market;
@@ -41,7 +47,7 @@ SELECT
   id AS trade_id,
   element_at(array('AAPL','MSFT','NVDA','AMZN','GOOG','META','TSLA','AMD'),
              CAST(pmod(id, 8) AS INT) + 1) AS symbol,
-  timestamp_seconds(1700000000 + CAST(pmod(id, 2592000) AS BIGINT)) AS ts,
+  timestamp_seconds(1699920000 + CAST(pmod(id, 30) AS BIGINT) * 86400 + CAST(pmod(id, 86400) AS BIGINT)) AS ts,
   round(50 + rand() * 500, 2) AS price,
   CAST(1 + rand() * 1000 AS INT) AS qty,
   CASE WHEN pmod(id, 2) = 0 THEN 'BUY' ELSE 'SELL' END AS side
@@ -271,7 +277,7 @@ SELECT
   (1000000 + id) AS trade_id,
   element_at(array('AAPL','MSFT','NVDA','AMZN','GOOG','META','TSLA','AMD'),
              CAST(pmod(id, 8) AS INT) + 1) AS symbol,
-  timestamp_seconds(1700000000 + CAST(pmod(id, 2592000) AS BIGINT)) AS ts,
+  timestamp_seconds(1699920000 + CAST(pmod(id, 30) AS BIGINT) * 86400 + CAST(pmod(id, 86400) AS BIGINT)) AS ts,
   round(50 + rand() * 500, 2) AS price,
   CAST(1 + rand() * 1000 AS INT) AS quantity,
   'NASDAQ' AS exchange
