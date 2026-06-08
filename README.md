@@ -5,13 +5,19 @@ Tech demo of an open lakehouse on Apache Iceberg **format-version 3**. One
 driven through the Spark Thrift Server (HiveServer2 wire protocol on `:10000`),
 so `beeline` or any JDBC client works. A Next.js webapp on `:3030` drives the
 same SQL from the browser and shows live state in the object store, Lakekeeper,
-and the Iceberg snapshot log per step.
+and the Iceberg snapshot log per step. A second engine, **Apache Flink 1.20**,
+runs by default: it streams a continuous `datagen → Iceberg` job into the *same*
+Lakekeeper catalog and object store while Spark queries it, so the demo shows
+multi-engine interop on one source of truth.
 
 Storage is swappable. By default everything lands in MinIO, but the webapp's
 first-run setup screen can point the warehouse at Google Cloud Storage instead.
 The UI relabels itself for whichever target is active. The diagram, file tree,
 lineage graph, and wrap-up all follow. See
 [Storage targets](#storage-targets-minio-or-gcs).
+
+For a themed view of what's landed lately — the Flink engine, swappable storage,
+the Apache-2.0 relicense, the webapp overhaul — see [CHANGELOG.md](CHANGELOG.md).
 
 ## Architecture
 
