@@ -24,7 +24,7 @@ jobs:
       run:
         working-directory: webapp
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
@@ -44,7 +44,7 @@ jobs:
     name: shell
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       # Lint exactly the project's three scripts. Running shellcheck directly
       # (rather than an auto-discovering action) keeps node_modules' own *.sh
       # files out of scope. shellcheck ships on the ubuntu-latest runner.
@@ -55,7 +55,7 @@ jobs:
     name: terraform
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: hashicorp/setup-terraform@v3
         with:
           # Pin the version: `fmt -check` is formatting-version-sensitive, so a
