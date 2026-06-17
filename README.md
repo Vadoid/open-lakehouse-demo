@@ -4,7 +4,8 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
 Tech demo of an open lakehouse on Apache Iceberg **format version 3**. One
-`terraform apply` brings up six containers on a single Docker network. SQL is
+`terraform apply` brings up eight containers on a single Docker network (six without
+the optional Flink streaming engine). SQL is
 driven through the Spark Thrift Server (HiveServer2 wire protocol on `:10000`),
 so `beeline` or any JDBC client works. A Next.js webapp on `:3030` drives the
 same SQL from the browser and shows live state in the object store, Lakekeeper,
@@ -65,8 +66,8 @@ holds Lakekeeper's metadata; MinIO holds Iceberg's data and metadata files;
 Lakekeeper hands out object-store paths and table snapshots; Spark Thrift
 executes the SQL; the webapp is a thin server that talks to all three at once.
 
-Two more containers — **Flink jobmanager + taskmanager** (dashed above) — join
-only when you opt into the streaming engine at deploy time. They read and write
+Two more containers — **Flink jobmanager + taskmanager** (dashed above) — run by
+default alongside the others; opt out at the deploy menu or with `ENABLE_FLINK=0`. They read and write
 the *same* Lakekeeper catalog and MinIO bucket as Spark. See
 [Flink streaming engine (on by default)](#flink-streaming-engine-on-by-default).
 
@@ -450,7 +451,7 @@ terraform apply -auto-approve
 Or wipe it (clean slate, demo only):
 
 ```bash
-docker rm -f lake-postgres lake-minio lakekeeper lake-migrate spark-thrift demo-webapp 2>/dev/null || true
+docker rm -f lake-postgres lake-minio lakekeeper lake-migrate spark-thrift demo-webapp flink-jobmanager flink-taskmanager 2>/dev/null || true
 docker network rm lakedemo
 ```
 
