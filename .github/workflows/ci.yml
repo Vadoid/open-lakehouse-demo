@@ -56,7 +56,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v4
         with:
           # Pin the version: `fmt -check` is formatting-version-sensitive, so a
           # future terraform release could reformat main.tf and redden CI on an
