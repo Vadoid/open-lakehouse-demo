@@ -215,8 +215,8 @@ neither knows about the other; they only share the catalog.
 ```
 
 - **Option 1 (default)** is the full Spark + Flink stack: it adds two containers
-  (`flink-jobmanager`, `flink-taskmanager`, ~3–4 GiB RAM), waits for the cluster,
-  verifies the stream commits, and prints the interop check. The streaming job
+  (`flink-jobmanager`, `flink-taskmanager`, ~3–4 GiB RAM), waits for the cluster
+  to be ready, and prints the stream-start instructions. The streaming job
   itself is owned by a **resubmit supervisor** inside the jobmanager container,
   not by `deploy.sh` — see below.
 - **Option 2** is the Spark-only stack (no Flink), byte-for-byte the original
@@ -395,10 +395,10 @@ Sources for the comparison are linked in the [footer](#sources).
   Spark container. Short writes use the initial token and are fine; a job that
   outlives the ~1 h token can't refresh. Set the Lakekeeper base URI to
   `http://lakekeeper:8181` if you run into it.
-- Pin versions: `lakekeeper_version` (default `v0.12.0`) and the Spark/Iceberg
-  versions in `spark/spark-defaults.conf`. The Lakekeeper warehouse JSON shape is
-  version-sensitive. If `apply` fails at bootstrap, check the Storage guide for
-  your Lakekeeper version.
+- Pin versions: `lakekeeper_version` (default `v0.12.0`) in `variables.tf`, and
+  the Spark image and Iceberg runtime versions in `main.tf`. The Lakekeeper
+  warehouse JSON shape is version-sensitive. If `apply` fails at bootstrap, check
+  the Storage guide for your Lakekeeper version.
 - Bootstrap (bucket + warehouse) is an imperative `local-exec` step rather than
   pure HCL. That's the normal split: Terraform for infra, a provisioner for
   catalog init. Needs `docker` + `curl` on the host.
