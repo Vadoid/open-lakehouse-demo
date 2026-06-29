@@ -395,10 +395,11 @@ Sources for the comparison are linked in the [footer](#sources).
   Spark container. Short writes use the initial token and are fine; a job that
   outlives the ~1 h token can't refresh. Set the Lakekeeper base URI to
   `http://lakekeeper:8181` if you run into it.
-- Pin versions: `lakekeeper_version` (default `v0.12.0`) and the Spark/Iceberg
-  versions in `spark/spark-defaults.conf`. The Lakekeeper warehouse JSON shape is
-  version-sensitive. If `apply` fails at bootstrap, check the Storage guide for
-  your Lakekeeper version.
+- Pin versions: `lakekeeper_version` (default `v0.12.0`) in `variables.tf` and
+  the Spark/Iceberg versions in `main.tf` (the `apache/spark:…` image tag and the
+  `ICEBERG_VER` constant in the container command). The Lakekeeper warehouse JSON
+  shape is version-sensitive. If `apply` fails at bootstrap, check the Storage
+  guide for your Lakekeeper version.
 - Bootstrap (bucket + warehouse) is an imperative `local-exec` step rather than
   pure HCL. That's the normal split: Terraform for infra, a provisioner for
   catalog init. Needs `docker` + `curl` on the host.
