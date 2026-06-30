@@ -188,7 +188,7 @@ neither knows about the other; they only share the catalog.
 ================================================================
   Engine selection
 ================================================================
-  Spark Thrift Server is ALWAYS started — it runs the full V3
+  Spark Thrift Server is ALWAYS started. It runs the full V3
   demo (sql/demo.sql): MERGE/CDC, branches, time travel, deletion
   vectors, maintenance. This is the primary engine.
 
@@ -201,8 +201,8 @@ neither knows about the other; they only share the catalog.
     • commits on each checkpoint (~10s)
 
   ...while Spark/beeline queries the SAME table and watches the
-  row count climb. This demonstrates multi-engine interop on one
-  Iceberg catalog — two engines, one source of truth.
+  row count climb. That is multi-engine interop on one Iceberg
+  catalog: two engines, one source of truth.
 
   Cost: +2 containers (jobmanager, taskmanager), ~3-4 GiB extra
   RAM. Flink is ON by default; opt out on a host with <12 GiB free.
@@ -470,7 +470,7 @@ works; the container can't resolve anything.
 Confirm it:
 
 ```bash
-docker run --rm busybox nslookup registry.npmjs.org   # "bad address" = broken
+docker run --rm busybox:1.36 nslookup registry.npmjs.org   # "bad address" = broken
 ```
 
 Fix: give the daemon a real upstream resolver in `/etc/docker/daemon.json`, then
