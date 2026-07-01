@@ -104,8 +104,8 @@ reasons for that. A teardown shouldn't quietly delete cloud resources, `gcloud`
 can stop to ask you to reauthenticate mid-script, and keeping the bucket lets the
 next deploy reuse it instead of re-minting the key and waiting out org-policy
 propagation. Set
-`CLEANUP_GCS=1` when you actually want them gone; the script prints the manual
-`gcloud` commands either way.
+`CLEANUP_GCS=1` when you actually want them gone; leave it unset and the script
+instead prints the manual `gcloud` commands so you can clean up by hand later.
 
 ### Manual
 
