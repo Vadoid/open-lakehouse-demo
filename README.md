@@ -20,8 +20,8 @@ The UI relabels itself for whichever target is active. The diagram, file tree,
 lineage graph, and wrap-up all follow. See
 [Storage targets](#storage-targets-minio-or-gcs).
 
-For a themed view of what's landed lately — the Flink engine, swappable storage,
-the Apache-2.0 relicense, the webapp overhaul — see [CHANGELOG.md](CHANGELOG.md).
+For a themed view of what's landed lately (the Flink engine, swappable storage,
+the Apache-2.0 relicense, the webapp overhaul), see [CHANGELOG.md](CHANGELOG.md).
 
 ## Architecture
 
@@ -29,9 +29,9 @@ the Apache-2.0 relicense, the webapp overhaul — see [CHANGELOG.md](CHANGELOG.m
 flowchart TB
     user(("host&nbsp;:3030"))
     web["<b>demo-webapp</b><br/>Next.js&nbsp;15 · React&nbsp;18<br/><i>server routes do all I/O</i>"]
-    spark["<b>Spark&nbsp;Thrift&nbsp;Server</b><br/>HiveServer2&nbsp;wire<br/>apache/spark&nbsp;3.5.6<br/>iceberg-spark-runtime&nbsp;1.11.0<br/><i>batch — full V3 demo</i>"]
-    flink["<b>Flink&nbsp;1.20</b> <i>(default on)</i><br/>jobmanager + taskmanager<br/>iceberg-flink-runtime&nbsp;1.11.0<br/><i>streaming — datagen → Iceberg</i>"]
-    lk["<b>Lakekeeper</b><br/>Iceberg&nbsp;REST&nbsp;catalog (Rust)<br/>v0.12.0 · authz: allow-all"]
+    spark["<b>Spark&nbsp;Thrift&nbsp;Server</b><br/>HiveServer2&nbsp;wire<br/>apache/spark&nbsp;3.5.6<br/>iceberg-spark-runtime&nbsp;1.11.0<br/><i>batch, full V3 demo</i>"]
+    flink["<b>Flink&nbsp;1.20</b> <i>(default on)</i><br/>jobmanager + taskmanager<br/>iceberg-flink-runtime&nbsp;1.11.0<br/><i>streaming, datagen → Iceberg</i>"]
+    lk["<b>Lakekeeper</b><br/>Iceberg&nbsp;REST&nbsp;catalog (Rust)<br/>v0.13.1 · authz: allow-all"]
     minio["<b>Object store</b><br/>MinIO (local) <i>or</i> GCS<br/>Parquet + Puffin"]
     pg["<b>Postgres&nbsp;15</b><br/>Lakekeeper metadata<br/><i>internal</i>"]
 
@@ -66,16 +66,16 @@ holds Lakekeeper's metadata; MinIO holds Iceberg's data and metadata files;
 Lakekeeper hands out object-store paths and table snapshots; Spark Thrift
 executes the SQL; the webapp is a thin server that talks to all three at once.
 
-Two more containers — **Flink jobmanager + taskmanager** (dashed above) — run by
-default alongside the others; opt out at the deploy menu or with `ENABLE_FLINK=0`. They read and write
+Two more containers, **Flink jobmanager + taskmanager** (dashed above), run by
+default alongside the others. Opt out at the deploy menu or with `ENABLE_FLINK=0`. They read and write
 the *same* Lakekeeper catalog and MinIO bucket as Spark. See
 [Flink streaming engine (on by default)](#flink-streaming-engine-on-by-default).
 
 In GCS mode a Google Cloud Storage bucket takes MinIO's place. Spark writes
 `gs://` paths through `GCSFileIO` (Iceberg's `ResolvingFileIO` picks the right
 FileIO from the URI scheme), and the webapp reads the bucket with the
-service-account key. Spark itself never gets that key: Lakekeeper vends it a
-short-lived per-table OAuth token via the `X-Iceberg-Access-Delegation` header.
+service-account key. Spark itself never gets that key. Lakekeeper vends it a
+short-lived per-table OAuth token through the `X-Iceberg-Access-Delegation` header.
 
 ## Run
 
@@ -142,13 +142,13 @@ the one thing batch can't show, a long-running append stream.
 The stream emits the **same eight tickers** (`AAPL, MSFT, NVDA, …`) the batch
 table `trades_v3` uses in step 1, so step 19 includes a **temporal join** that
 joins the live stream's last two minutes against that static table on the shared
-symbol — two engines, one catalog, one SQL join.
+symbol, two engines, one catalog, one SQL join.
 
 The stream is **user-triggered**: it does not run on deploy. Open the bonus step
 (**Multi-engine streaming**, step 19) in the webapp and click **▶ Start
 streaming**. That arms a flag file the jobmanager's **resubmit supervisor**
 watches; the supervisor submits the job, resubmits it after a runtime storage
-switch, and the Stop button cancels it. (The supervisor — not `deploy.sh` — owns
+switch, and the Stop button cancels it. (The supervisor, not `deploy.sh`, owns
 submission, because the webapp can't `docker exec` and there is no Flink SQL
 gateway.)
 
@@ -157,7 +157,7 @@ gateway.)
 The two engines are **not interchangeable**, so this is deliberately *not* an
 either/or switch. `sql/demo.sql` is Spark-dialect: it uses `MERGE INTO`, the
 `range()` table-valued function, Spark's `CALL` maintenance procedures, and
-Spark's `CREATE TABLE ... TBLPROPERTIES` DDL — none of which exist in Flink SQL
+Spark's `CREATE TABLE ... TBLPROPERTIES` DDL, none of which exist in Flink SQL
 (different `CREATE CATALOG ... WITH (...)` syntax, no `MERGE`, no `range()`,
 different maintenance). A Flink-*replacement* mode would force a thinner
 Flink-only demo and drop roughly half the V3 features. So Flink is purely
@@ -168,7 +168,7 @@ story. Please don't "fix" this back into a toggle.
 
 One Lakekeeper catalog, one MinIO bucket, two engines. Flink writes
 `demo.market.trades_stream`; Spark reads the identical table through the same
-REST catalog. Proof is the row count climbing while Flink runs — query it twice,
+REST catalog. Proof is the row count climbing while Flink runs, query it twice,
 ~10s apart:
 
 ```bash
@@ -188,7 +188,7 @@ neither knows about the other; they only share the catalog.
 ================================================================
   Engine selection
 ================================================================
-  Spark Thrift Server is ALWAYS started — it runs the full V3
+  Spark Thrift Server is ALWAYS started, it runs the full V3
   demo (sql/demo.sql): MERGE/CDC, branches, time travel, deletion
   vectors, maintenance. This is the primary engine.
 
@@ -201,8 +201,8 @@ neither knows about the other; they only share the catalog.
     • commits on each checkpoint (~10s)
 
   ...while Spark/beeline queries the SAME table and watches the
-  row count climb. This demonstrates multi-engine interop on one
-  Iceberg catalog — two engines, one source of truth.
+  row count climb. That's multi-engine interop on one Iceberg
+  catalog: two engines, one source of truth.
 
   Cost: +2 containers (jobmanager, taskmanager), ~3-4 GiB extra
   RAM. Flink is ON by default; opt out on a host with <12 GiB free.
@@ -215,10 +215,10 @@ neither knows about the other; they only share the catalog.
 ```
 
 - **Option 1 (default)** is the full Spark + Flink stack: it adds two containers
-  (`flink-jobmanager`, `flink-taskmanager`, ~3–4 GiB RAM), waits for the cluster,
+  (`flink-jobmanager`, `flink-taskmanager`, ~3-4 GiB RAM), waits for the cluster,
   verifies the stream commits, and prints the interop check. The streaming job
   itself is owned by a **resubmit supervisor** inside the jobmanager container,
-  not by `deploy.sh` — see below.
+  not by `deploy.sh` (see below).
 - **Option 2** is the Spark-only stack (no Flink), byte-for-byte the original
   single-engine demo. Pick it on a low-RAM host.
 
@@ -238,14 +238,14 @@ default. `ENABLE_FLINK=0 ./deploy.sh` (or `-var enable_flink=false`) is the
 silent opt-out to a Spark-only stack without the menu.
 
 Watch the running INSERT job at the **Flink web UI**, `http://localhost:8081`
-(no login — also linked from the webapp home toolbar). Data and metadata land
+(no login, also linked from the webapp home toolbar). Data and metadata land
 under `warehouse/demo/market/trades_stream` in MinIO (`:9001` console).
 
 ### Tuning
 
-- **Throughput** — `rows-per-second` in `flink/sql/stream.sql` (default `50`).
+- **Throughput**: `rows-per-second` in `flink/sql/stream.sql` (default `50`).
   Raise to stress the sink, lower to slow the climb.
-- **Commit cadence** — `execution.checkpointing.interval` in `flink/config.yaml`
+- **Commit cadence**: `execution.checkpointing.interval` in `flink/config.yaml`
   (default `10s`). The Iceberg sink makes rows visible to Spark only on a
   completed checkpoint, so this is also how often the count jumps.
 
@@ -365,14 +365,14 @@ MinIO, and CI gating on every `sql/` change. The webapp&apos;s wrap-up page
 | Feature                            | Iceberg V1          | Iceberg V2                       | **Iceberg V3**                   | Delta Lake                       |
 | ---------------------------------- | ------------------- | -------------------------------- | -------------------------------- | -------------------------------- |
 | Row-level `DELETE` / `UPDATE`      | rewrite data files  | positional deletes (Parquet)     | **deletion vectors (Puffin)**    | deletion vectors (Roaring 64)    |
-| Row lineage (`_row_id`, seq #)     | —                   | —                                | **yes**                          | —                                |
-| Default column values              | —                   | —                                | **yes**                          | yes (3.x)                        |
-| `VARIANT` semi-structured type     | —                   | —                                | **yes (spec)**                   | yes                              |
-| Nanosecond timestamps              | —                   | —                                | **yes (spec)**                   | µs only                          |
+| Row lineage (`_row_id`, seq #)     | no                  | no                               | **yes**                          | no                               |
+| Default column values              | no                  | no                               | **yes**                          | yes (3.x)                        |
+| `VARIANT` semi-structured type     | no                  | no                               | **yes (spec)**                   | yes                              |
+| Nanosecond timestamps              | no                  | no                               | **yes (spec)**                   | µs only                          |
 | Hidden partitioning                | yes                 | yes                              | yes                              | generated columns                |
 | Schema add / drop / rename / reorder | yes               | yes                              | yes                              | add / drop / rename              |
 | Time travel                        | yes                 | yes                              | yes                              | yes                              |
-| Open REST catalog spec             | —                   | yes                              | yes                              | Unity OSS / Hive                 |
+| Open REST catalog spec             | no                  | yes                              | yes                              | Unity OSS / Hive                 |
 | Engine breadth                     | broad               | broad                            | broad                            | Spark-first, growing             |
 
 Sources for the comparison are linked in the [footer](#sources).
@@ -395,7 +395,7 @@ Sources for the comparison are linked in the [footer](#sources).
   Spark container. Short writes use the initial token and are fine; a job that
   outlives the ~1 h token can't refresh. Set the Lakekeeper base URI to
   `http://lakekeeper:8181` if you run into it.
-- Pin versions: `lakekeeper_version` (default `v0.12.0`) and the Spark/Iceberg
+- Pin versions: `lakekeeper_version` (default `v0.13.1`) and the Spark/Iceberg
   versions in `spark/spark-defaults.conf`. The Lakekeeper warehouse JSON shape is
   version-sensitive. If `apply` fails at bootstrap, check the Storage guide for
   your Lakekeeper version.
@@ -500,10 +500,10 @@ register at all (check `docker logs lakekeeper`).
 
 ### Flink: `trades_stream` count never grows (no data files)
 
-The Iceberg sink commits a snapshot — and makes rows visible to Spark — **only
+The Iceberg sink commits a snapshot (and makes rows visible to Spark) **only
 on a completed checkpoint**. Without `execution.checkpointing.interval` the job
 runs, buffers rows, and commits *nothing*; Spark sees an empty table forever.
-`flink/config.yaml` sets a 10s checkpoint interval for exactly this reason —
+`flink/config.yaml` sets a 10s checkpoint interval for exactly this reason, so
 don't remove it. Confirm checkpoints are completing at
 `http://localhost:8081` → the job → Checkpoints tab.
 
@@ -534,7 +534,7 @@ recommended for the combined stack) or drop `spark.driver.memory` in
 
 ### Flink: V3 write features
 
-The streaming table is **format-version 3, append-only** — the same V3 line Spark
+The streaming table is **format-version 3, append-only**, the same V3 line Spark
 uses everywhere else in the demo. Flink 1.20 (iceberg-flink-runtime 1.11.0) writes
 the V3 appends, and Spark reads back the V3 **row lineage**: each row carries a
 `_row_id` and `_last_updated_sequence_number` the sink assigned. Because the stream
@@ -548,10 +548,10 @@ into a V3 stream.
 
 Used to validate the comparison table above:
 
-- Apache Iceberg table spec (V1 / V2 / V3) — <https://iceberg.apache.org/spec/>
-- `apache/iceberg · format/spec.md` — <https://github.com/apache/iceberg/blob/main/format/spec.md>
-- Delta Lake protocol (current) — <https://github.com/delta-io/delta/blob/master/PROTOCOL.md>
-- Apache Iceberg releases (1.9 → 1.11) — <https://github.com/apache/iceberg/releases>
+- Apache Iceberg table spec (V1 / V2 / V3): <https://iceberg.apache.org/spec/>
+- `apache/iceberg · format/spec.md`: <https://github.com/apache/iceberg/blob/main/format/spec.md>
+- Delta Lake protocol (current): <https://github.com/delta-io/delta/blob/master/PROTOCOL.md>
+- Apache Iceberg releases (1.9 → 1.11): <https://github.com/apache/iceberg/releases>
 
 ## Contributing
 

@@ -1,10 +1,22 @@
 # syntax=docker/dockerfile:1.6
 # Multi-stage Next.js build → minimal runtime via standalone output.
+#
+# Layer order is deliberate: dependency install is its own stage keyed only on
+# package.json + package-lock.json, so the ~400MB node_modules layer is reused
+# across deploys and only re-runs when the lockfile changes. Source edits bust
+# the builder stage's `npm run build` but NOT the deps install.
+#
+# Built through the kreuzwerker/docker Terraform provider, which uses the
+# CLASSIC Docker build API (not BuildKit) — so no `RUN --mount=type=cache`
+# here; it would fail the provider build. Layer caching is the mechanism.
 
 FROM node:20-alpine AS deps
 WORKDIR /app
-COPY package.json ./
-RUN npm install --no-audit --no-fund --legacy-peer-deps
+# Copy the lockfile too so `npm ci` installs it verbatim (deterministic, skips
+# full dependency-tree re-resolution). `npm install` with only package.json
+# re-resolved the whole tree on every build.
+COPY package.json package-lock.json ./
+RUN npm ci --no-audit --no-fund --legacy-peer-deps
 
 FROM node:20-alpine AS builder
 WORKDIR /app

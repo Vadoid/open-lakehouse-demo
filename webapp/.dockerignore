@@ -1,7 +1,13 @@
 node_modules
 .next
+out
 .git
 npm-debug.log*
 Dockerfile
 .dockerignore
 README.md
+# Test + coverage artifacts — not needed to build the app image.
+coverage
+vitest.config.ts
+# Incremental TS build cache — regenerated inside the builder stage.
+tsconfig.tsbuildinfo

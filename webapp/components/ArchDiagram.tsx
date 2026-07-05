@@ -86,7 +86,7 @@ export default function ArchDiagram() {
         <rect x="340" y="230" width="220" height="120" rx="10" fill="var(--arch-lake-bg)" stroke="var(--arch-lake-stroke)" strokeWidth="1.5" />
         <text x="450" y="260" textAnchor="middle" fontFamily="ui-sans-serif, system-ui" fontWeight="600" fontSize="15" fill="var(--arch-lake-fg)">Lakekeeper</text>
         <text x="450" y="280" textAnchor="middle" fontFamily="ui-sans-serif, system-ui" fontSize="11" fill="var(--arch-lake-sub)">Iceberg REST catalog (Rust)</text>
-        <text x="450" y="306" textAnchor="middle" fontFamily="ui-monospace, monospace" fontSize="11" fill="var(--arch-lake-sub)">v0.12.0</text>
+        <text x="450" y="306" textAnchor="middle" fontFamily="ui-monospace, monospace" fontSize="11" fill="var(--arch-lake-sub)">v0.13.1</text>
         <text x="450" y="324" textAnchor="middle" fontFamily="ui-monospace, monospace" fontSize="11" fill="var(--arch-lake-sub)">authz: allow-all (demo)</text>
       </g>
 

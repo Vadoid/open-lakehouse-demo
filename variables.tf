@@ -1,7 +1,7 @@
 variable "lakekeeper_version" {
   description = "Lakekeeper catalog image tag on quay.io"
   type        = string
-  default     = "v0.12.0"
+  default     = "v0.13.1"
 }
 
 variable "pg_user" {

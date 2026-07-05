@@ -330,6 +330,31 @@ reconcile_orphan_network() {
   fi
 }
 
+# ---------------------------------------------------------------------------
+# 1d. Build the webapp image with BuildKit — Terraform can't.
+# The kreuzwerker/docker provider builds through the CLASSIC Docker build API
+# (no BuildKit). There a ~40s Next.js build hangs for ~17 min and can time the
+# provider out ("context deadline exceeded"). So we build the image here, ahead
+# of `terraform apply`, and Terraform consumes the prebuilt tag via a
+# `data "docker_image"` (see main.tf). BuildKit gives parallel stages + layer
+# caching, so a rebuild with an unchanged lockfile reuses the node_modules layer.
+#
+# Portability: BuildKit is the default builder on Docker 23+ (2023) and always
+# ships with Docker Desktop / buildx. If it is somehow unavailable we fall back
+# to the classic builder — slower, but the Dockerfile carries no BuildKit-only
+# `RUN --mount`, so it still builds under either.
+# ---------------------------------------------------------------------------
+WEBAPP_IMAGE="iceberg-v3-demo-webapp:latest"
+
+build_webapp() {
+  echo ">> building webapp image (${WEBAPP_IMAGE}) with BuildKit"
+  if DOCKER_BUILDKIT=1 docker build -t "${WEBAPP_IMAGE}" webapp; then
+    return 0
+  fi
+  echo "!! BuildKit build failed — retrying with the classic builder (slower)"
+  DOCKER_BUILDKIT=0 docker build -t "${WEBAPP_IMAGE}" webapp
+}
+
 run_terraform() {
   if [ ! -d .terraform ]; then
     echo ">> terraform init"
@@ -446,6 +471,7 @@ select_engine
 ensure_docker
 align_docker_host
 ensure_container_internet
+build_webapp
 run_terraform
 wait_for_thrift
 run_demo

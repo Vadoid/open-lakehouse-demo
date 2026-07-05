@@ -438,31 +438,30 @@ resource "docker_container" "flink_taskmanager" {
 
 # ----------------------------------------------------------------------------
 # Webapp  (Next.js 15 — guided clickthrough of sql/demo.sql)
-# Rebuilds when anything under webapp/ changes (src_hash trigger).
+#
+# The image is built OUTSIDE Terraform, by deploy.sh's build_webapp(), using
+# BuildKit. The kreuzwerker/docker provider builds through the CLASSIC Docker
+# build API (no BuildKit) — which turned a ~40s image build into a ~17 min hang
+# that eventually timed the provider out ("context deadline exceeded"). So
+# Terraform just consumes the prebuilt local tag via this data source.
+#
+# deploy.sh rebuilds under the same tag; a source change yields a new image ID,
+# which this data source resolves at plan time, so the container below recreates
+# only when the image actually changed. Because Terraform no longer owns the
+# image, `terraform destroy` leaves it in place and the BuildKit layer cache
+# survives, making the next build near-instant.
+#
+# Requires the image to exist before `terraform apply`. deploy.sh always builds
+# it first; for the manual path run:
+#   docker build -t iceberg-v3-demo-webapp:latest webapp/
 # ----------------------------------------------------------------------------
-locals {
-  webapp_all = fileset("${path.module}/webapp", "**")
-  webapp_excluded = setunion(
-    fileset("${path.module}/webapp", "node_modules/**"),
-    fileset("${path.module}/webapp", ".next/**"),
-    fileset("${path.module}/webapp", "out/**"),
-  )
-  webapp_files = sort(tolist(setsubtract(local.webapp_all, local.webapp_excluded)))
-  webapp_hash  = sha1(join("", [for f in local.webapp_files : filesha1("${path.module}/webapp/${f}")]))
-}
-
-resource "docker_image" "webapp" {
+data "docker_image" "webapp" {
   name = "iceberg-v3-demo-webapp:latest"
-  build {
-    context    = "${path.module}/webapp"
-    dockerfile = "Dockerfile"
-  }
-  triggers = { src_hash = local.webapp_hash }
 }
 
 resource "docker_container" "webapp" {
   name       = "demo-webapp"
-  image      = docker_image.webapp.image_id
+  image      = data.docker_image.webapp.id
   depends_on = [docker_container.spark_thrift, null_resource.bootstrap]
   networks_advanced { name = docker_network.lake.name }
   ports {
