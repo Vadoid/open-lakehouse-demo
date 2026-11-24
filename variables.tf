@@ -46,3 +46,11 @@ variable "enable_flink" {
   type        = bool
   default     = true
 }
+
+# Terraform is also used by the PowerShell launcher on native Windows. Convert
+# Windows paths to Docker Desktop's shared-drive form for bind mounts.
+variable "os_family" {
+  description = "Host OS running Terraform (windows or unix)"
+  type        = string
+  default     = "unix"
+}

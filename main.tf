@@ -53,7 +53,7 @@ resource "docker_container" "postgres" {
 # MinIO  (S3-compatible object store for the Iceberg warehouse)
 # ----------------------------------------------------------------------------
 resource "docker_image" "minio" {
-  name = "minio/minio:RELEASE.2025-04-22T22-12-26Z"
+  name = "cgr.dev/chainguard/minio:latest"
 }
 
 resource "docker_container" "minio" {
@@ -127,7 +127,10 @@ resource "null_resource" "bootstrap" {
   depends_on = [docker_container.lakekeeper, docker_container.minio]
   triggers   = { always = timestamp() }
   provisioner "local-exec" {
-    command = "${path.module}/scripts/bootstrap.sh"
+    # Terraform's default shell on Windows is cmd.exe. Select PowerShell there;
+    # keep the existing Bash bootstrap for Linux and macOS.
+    interpreter = var.os_family == "windows" ? ["PowerShell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command"] : ["bash", "-c"]
+    command     = var.os_family == "windows" ? "& '${replace(path.module, "'", "''")}/scripts/bootstrap.ps1'" : "${path.module}/scripts/bootstrap.sh"
     environment = {
       NETWORK       = docker_network.lake.name
       S3_ACCESS_KEY = var.s3_access_key
@@ -289,7 +292,9 @@ resource "docker_container" "flink_jobmanager" {
   # there) — without them the streaming job dies every checkpoint.
   volumes {
     host_path      = abspath("${path.module}/flink/config.yaml")
-    container_path = "/opt/flink/conf/config.yaml"
+    # Flink's startup config parser edits config.yaml in place. Stage the
+    # read-only host config elsewhere, then copy it into the writable image dir.
+    container_path = "/tmp/flink-config.yaml"
     read_only      = true
   }
   # stream.sql — submitted by the resubmit supervisor via sql-client.sh -f.
@@ -330,6 +335,7 @@ resource "docker_container" "flink_jobmanager" {
     "/bin/bash", "-c",
     <<-EOT
       ${local.flink_jar_stage}
+      cp /tmp/flink-config.yaml /opt/flink/conf/config.yaml
       # Start the JM as a background daemon so this script (container PID 1) stays
       # in the foreground as the supervisor. (start-foreground would block here.)
       /opt/flink/bin/jobmanager.sh start
@@ -426,12 +432,12 @@ resource "docker_container" "flink_taskmanager" {
   # the taskmanager runs the sink operator, so it needs the Iceberg jars too.
   volumes {
     host_path      = abspath("${path.module}/flink/config.yaml")
-    container_path = "/opt/flink/conf/config.yaml"
+    container_path = "/tmp/flink-config.yaml"
     read_only      = true
   }
   command = [
     "/bin/bash", "-c",
-    "${local.flink_jar_stage}\n/opt/flink/bin/taskmanager.sh start-foreground",
+    "${local.flink_jar_stage}\ncp /tmp/flink-config.yaml /opt/flink/conf/config.yaml\n/opt/flink/bin/taskmanager.sh start-foreground",
   ]
   restart = "unless-stopped"
 }

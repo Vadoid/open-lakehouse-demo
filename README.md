@@ -81,6 +81,33 @@ short-lived per-table OAuth token through the `X-Iceberg-Access-Delegation` head
 
 ### One-shot (recommended)
 
+#### Native Windows (Docker Desktop + PowerShell)
+
+Windows is supported directly with Docker Desktop using Linux containers; no
+VirtualBox or separate WSL distribution is required. Install Docker Desktop,
+Terraform >= 1.5, and PowerShell 7 (Windows PowerShell 5.1 also works). Start
+Docker Desktop once, open PowerShell in this repository, and run:
+
+```powershell
+.\deploy.ps1                         # Spark + Flink, or choose Spark only
+.\deploy.ps1 -SparkOnly              # omit the Flink containers
+.\deploy.ps1 -RunDemo                # also run all of sql/demo.sql
+.\deploy.ps1 -SkipNetCheck           # skip container DNS preflight
+.\destroy.ps1                       # remove local stack, preserve GCS resources
+$env:CLEANUP_GCS = '1'; .\destroy.ps1 # also remove eligible generated GCS resources
+```
+
+Docker Desktop must be configured for Linux containers and the project drive
+must be available for file sharing. The scripts pass Windows bind mounts to
+the Terraform Docker provider in Docker Desktop's `/c/...` form. Terraform
+uses the native `scripts/bootstrap.ps1`; Unix deployments continue to use
+`scripts/bootstrap.sh`. Native Windows setup does not invoke Bash, WSL, or
+VirtualBox.
+
+PowerShell parameters map to the Unix environment switches: `-SparkOnly`
+corresponds to `ENABLE_FLINK=0`, `-RunDemo` to `RUN_DEMO=1`, and
+`-SkipNetCheck` to `SKIP_NET_CHECK=1`.
+
 ```bash
 ./deploy.sh
 ```
@@ -263,9 +290,10 @@ See [Storage targets](#storage-targets-minio-or-gcs).
 
 ### Prereqs
 
-- `docker` (Docker Desktop on macOS, or Docker Engine on Linux)
+- `docker` (Docker Desktop on Windows/macOS, or Docker Engine on Linux)
 - `terraform` >= 1.5
-- `curl` (for the bootstrap step)
+- `bash` and `curl` for the Unix launcher/bootstrap; Windows uses PowerShell
+  web requests for bootstrap
 
 ## Storage targets: MinIO or GCS
 
