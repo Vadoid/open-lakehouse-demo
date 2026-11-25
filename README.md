@@ -133,11 +133,7 @@ ENABLE_JUPYTER=1 ./deploy.sh
 ./deploy.sh
 ```
 
-`deploy.sh` ensures the Docker daemon is running (launches Docker Desktop on
-macOS, `systemctl start docker` on Linux), runs `terraform init` /
-`terraform apply`, and waits for the Spark Thrift Server to accept JDBC. The
-stack comes up **empty** so you can run each step yourself from the webapp.
-Set `RUN_DEMO=1` to batch the whole `sql/demo.sql` through beeline instead.
+The `deploy.sh` script ensures that the Docker daemon is running (it launches Docker Desktop on macOS and uses the command `systemctl start docker` on Linux), runs the commands `terraform init` and `terraform apply`, and waits for the Spark Thrift Server to accept JDBC. The stack starts empty so you can run each step yourself from the web app. Alternatively, set RUN_DEMO=1 to run the entire SQL/demo.sql script through Beeline.
 
 ```bash
 ./deploy.sh                    # bring up an empty stack (run steps in the webapp)
@@ -147,14 +143,97 @@ CLEANUP_GCS=1 ./destroy.sh     # also delete the auto-created GCS bucket + servi
 ENABLE_JUPYTER=1 ./deploy.sh   # opt in to the separate JupyterLab container
 ```
 
-`destroy.sh` is local-only by default: it removes the containers and network but
-leaves any auto-created GCS bucket and service account alone. There are good
-reasons for that. A teardown shouldn't quietly delete cloud resources, `gcloud`
-can stop to ask you to reauthenticate mid-script, and keeping the bucket lets the
-next deploy reuse it instead of re-minting the key and waiting out org-policy
-propagation. Set
-`CLEANUP_GCS=1` when you actually want them gone; the script prints the manual
-`gcloud` commands either way.
+By default, `destroy.sh` only acts locally: it removes containers and networks, but leaves any auto-created GCS buckets and service accounts intact. There are good reasons for this. A teardown shouldn't delete cloud resources silently. `gcloud` may stop and ask you to reauthenticate mid-script. Keeping the bucket lets the next deployment reuse it instead of re-minting the key and waiting for the organisation policy to propagate. Set `CLEANUP_GCS=1` when you actually want the resources deleted; the script prints the manual gcloud commands either way.
+
+## Optional MLflow add-on (Step 1)
+
+This standalone Compose project incorporates an open-source MLflow Tracking API and UI alongside a database-backed Model Registry. It is independent of the core lakehouse and has no impact on Terraform resources, the lakehouse database or the lakehouse artefact store. MLflow uses its own PostgreSQL database for runs and registry metadata, as well as its own Docker volume for model artefacts. These volumes will survive the 'docker compose down' command, but you should only remove them if you intend to erase MLflow data.
+
+To minimise its impact on a laptop, the optional MLflow tracking server is limited to 1 CPU and 1 GB of RAM, and its PostgreSQL service is limited to 0.5 CPUs and 768 MB of RAM. These Compose limits only apply to the MLflow add-on. They do not reserve these resources or affect Spark, Flink or any other core lakehouse service. After starting MLflow, check the actual usage with:
+
+```powershell
+docker stats --no-stream mlflow mlflow-db
+```
+
+The MLflow server limits can be changed per PowerShell session with `MLFLOW_SERVER_CPUS` and `MLFLOW_SERVER_MEM_LIMIT`. For example, to give the server 2 CPUs and 2 GB RAM:
+
+```powershell
+$env:MLFLOW_SERVER_CPUS = '2.0'
+$env:MLFLOW_SERVER_MEM_LIMIT = '2g'
+docker compose -p mlflow -f .\mlflow\compose.yaml up -d
+```
+
+The defaults are 1 CPU and 1 GB RAM. Compose recreates the server with the new limits; the MLflow database limits remain unchanged. Clear either override from the current PowerShell session to return that setting to its default:
+
+```powershell
+Remove-Item Env:MLFLOW_SERVER_CPUS -ErrorAction SilentlyContinue
+Remove-Item Env:MLFLOW_SERVER_MEM_LIMIT -ErrorAction SilentlyContinue
+```
+
+Start the core lakehouse first so its `lakedemo` network exists. In PowerShell, from the repository root:
+
+```powershell
+# Start the core (Jupyter is optional but useful for MLflow experiments)
+.\deploy.ps1 -Jupyter
+
+# Optional: set a local MLflow database password (letters and numbers only)
+$env:MLFLOW_DB_PASSWORD = 'ChooseALocalPassword123'
+if ($env:MLFLOW_DB_PASSWORD) { 'MLFLOW_DB_PASSWORD is set' } else { 'MLFLOW_DB_PASSWORD is not set' }
+
+# Start the independent MLflow add-on
+docker compose -p mlflow -f .\mlflow\compose.yaml up -d
+docker compose -p mlflow -f .\mlflow\compose.yaml ps
+docker compose -p mlflow -f .\mlflow\compose.yaml logs -f mlflow
+```
+
+Open [http://localhost:5000](http://localhost:5000) for the MLflow UI and Tracking API. From a Jupyter notebook on the lakehouse network, connect with:
+
+```python
+# Install the matching open-source Python client in the notebook environment.
+%pip install mlflow==3.17.2
+
+import mlflow
+
+mlflow.set_tracking_uri("http://mlflow:5000")
+```
+
+In a Python environment running on a Windows host, use `mlflow.set_tracking_uri('http://localhost:5000')`. The `mlflow` hostname is available to containers on `lakedemo`; PostgreSQL can only be accessed on MLflow's private Compose network. The default database password is for local evaluation only. To override this, set `$env:MLFLOW_DB_PASSWORD` before `docker compose up`; use a URL-safe value consisting of letters and numbers so the connection string parses.
+
+### Step 2: log a run and register a model from Jupyter
+
+Open [JupyterLab](http://localhost:8888/lab), then open `02_mlflow_tracking_registry.ipynb` from the `work` directory. Run its cells in order. The first cell installs the matching MLflow client and scikit-learn in the running notebook container; repeat it if you recreate that container. The example trains a small regression model, logs parameters and an RMSE metric to the `lakehouse-ml-quickstart` experiment, and registers the model as
+`lakehouse-demo-regressor`. See the run under **Experiments** and the model under **Models** in [MLflow](http://localhost:5000).
+
+The notebook file persists under `notebooks/`, while the client packages are installed inside the optional Jupyter container. This step still leaves all
+core lakehouse services untouched.
+
+Stop the add-on before destroying the core stack, because its server attaches to the core's external Docker network:
+
+```powershell
+docker compose -p mlflow -f .\mlflow\compose.yaml down
+```
+
+This keeps the named database and artifact volumes. To intentionally reset all MLflow runs, registry entries, and artifacts, add `-v` to that `down` command.
+The core stack remains unchanged when the add-on is started or stopped. A later step can add an independent RAG/LLM explanation service that consumes registered models without coupling it to the core deployment.
+
+### Future work: optional LLM and RAG integration
+
+The current MLflow add-on provides the tracking server, database-backed model registry, and artifact storage. MLflow also supports GenAI tracing, evaluation
+and prompt versioning, but the current quickstart does not implement these workflows. They require an LLM/RAG application and client-side instrumentation
+MLflow does not provide the LLM, retrieval pipeline, or explanation application.
+
+Possible follow-on steps, each kept separate from the core lakehouse:
+
+1. Add a standalone RAG/LLM service that reads the gold data from the lakehouse
+   and exposes an explanation API or UI.
+2. Instrument its retrieval and generation calls with MLflow tracing, and record
+   prompt versions and relevant run metadata.
+3. Add a small evaluation dataset and MLflow GenAI evaluation workflow to compare
+   prompt or model changes.
+4. Store any vector index in the optional RAG service's own storage, with an
+   explicit refresh process from the lakehouse gold data.
+
+These are future implementation items, not services enabled by the current Compose stack. Keep them opt-in and isolated; do not modify the core lakehouse components to add them.
 
 (Optional) DBeaver is a desktop database client. You can use it to connect to the Spark Thrift Server and run SQL queries in a graphical editor. It is separate from the web application at http://localhost:3030.
 
