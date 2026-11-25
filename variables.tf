@@ -47,6 +47,14 @@ variable "enable_flink" {
   default     = true
 }
 
+# ADDITIVE OPTIONAL INTEGRATION: Jupyter runs as a separate container on the
+# existing Docker network. Disabled by default; does not change core services.
+variable "enable_jupyter" {
+  description = "Run an optional JupyterLab container on the lakehouse network."
+  type        = bool
+  default     = false
+}
+
 # Terraform is also used by the PowerShell launcher on native Windows. Convert
 # Windows paths to Docker Desktop's shared-drive form for bind mounts.
 variable "os_family" {

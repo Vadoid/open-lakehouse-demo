@@ -10,6 +10,8 @@ cd "$(dirname "$0")"
 # engine menu (select_engine) lets you opt out to a Spark-only stack; ENABLE_FLINK=0
 # in the environment is the silent non-interactive opt-out (CI / low-RAM hosts).
 ENABLE_FLINK="${ENABLE_FLINK:-1}"
+# ADDITIVE OPTIONAL INTEGRATION — JupyterLab stays off unless explicitly opted in.
+ENABLE_JUPYTER="${ENABLE_JUPYTER:-0}"
 
 # ---------------------------------------------------------------------------
 # 0. Engine selection (interactive).
@@ -361,12 +363,13 @@ run_terraform() {
     terraform init -input=false
   fi
   reconcile_orphan_network
-  echo ">> terraform apply (enable_flink=$([ "${ENABLE_FLINK}" = "1" ] && echo true || echo false))"
+  echo ">> terraform apply (enable_flink=$([ "${ENABLE_FLINK}" = "1" ] && echo true || echo false), enable_jupyter=$([ "${ENABLE_JUPYTER}" = "1" ] && echo true || echo false))"
   # Map the engine choice to the Terraform bool. Flink resources are count-gated
   # on enable_flink, so false => zero Flink containers, byte-for-byte the
   # original Spark-only stack.
   terraform apply -auto-approve -input=false \
-    -var "enable_flink=$([ "${ENABLE_FLINK}" = "1" ] && echo true || echo false)"
+    -var "enable_flink=$([ "${ENABLE_FLINK}" = "1" ] && echo true || echo false)" \
+    -var "enable_jupyter=$([ "${ENABLE_JUPYTER}" = "1" ] && echo true || echo false)"
 }
 
 # ---------------------------------------------------------------------------

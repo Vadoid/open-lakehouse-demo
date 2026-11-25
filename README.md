@@ -10,7 +10,7 @@ driven through the Spark Thrift Server (HiveServer2 wire protocol on `:10000`),
 so `beeline` or any JDBC client works. A Next.js webapp on `:3030` drives the
 same SQL from the browser and shows live state in the object store, Lakekeeper,
 and the Iceberg snapshot log per step. A second engine, **Apache Flink 1.20**,
-runs by default: it streams a continuous `datagen → Iceberg` job into the *same*
+runs by default: it streams a continuous `datagen → Iceberg` job into the _same_
 Lakekeeper catalog and object store while Spark queries it, so the demo shows
 multi-engine interop on one source of truth.
 
@@ -68,7 +68,7 @@ executes the SQL; the webapp is a thin server that talks to all three at once.
 
 Two more containers, **Flink jobmanager + taskmanager** (dashed above), run by
 default alongside the others. Opt out at the deploy menu or with `ENABLE_FLINK=0`. They read and write
-the *same* Lakekeeper catalog and MinIO bucket as Spark. See
+the _same_ Lakekeeper catalog and MinIO bucket as Spark. See
 [Flink streaming engine (on by default)](#flink-streaming-engine-on-by-default).
 
 In GCS mode a Google Cloud Storage bucket takes MinIO's place. Spark writes
@@ -83,30 +83,51 @@ short-lived per-table OAuth token through the `X-Iceberg-Access-Delegation` head
 
 #### Native Windows (Docker Desktop + PowerShell)
 
-Windows is supported directly with Docker Desktop using Linux containers; no
-VirtualBox or separate WSL distribution is required. Install Docker Desktop,
-Terraform >= 1.5, and PowerShell 7 (Windows PowerShell 5.1 also works). Start
-Docker Desktop once, open PowerShell in this repository, and run:
+Docker Desktop supports Windows directly using Linux containers. There is not need for VirtualBox or a user-managed WSL distribution. There is no need for VirtualBox or a user-managed WSL distribution. Install Docker Desktop, Terraform 1.5 or later and PowerShell 7. Windows PowerShell 5.1 is also supported.
+
+The changes include:
+
+- Powershell deploy and destory scripts, with options for Spark-only deployments and running the SQL demo.
+- A PowerShell Lakekeeper bootstrap script: Linux and macOS continue using Bash.
+- Windows-compatible Terraform paths for Docker bind mounts.
+- LF line endings for Terraform and container-facing script/config, preventing Bash errors such as `do\r`.
+- Flink config staging so its startup process can write to its config file.
+- README instructions for installing and running the demo on Windows.
+
+Adjusted deployment checks as you encountered Windows-specific errors. We confirmed Spark JDBC responds to SELECT 1, Lakekeeper reports healthy, and lake-migrate exited successfully with code 0. Flink still needs to be deployed and running before its UI or trades_stream table will be available.
+
+Confirmed that Spark JDBC responds to 'SELECT 1', that Lakekeeper reports as healthy, and that LakeMigrate exited successfully with code 0. However, Flink still needs to be deployed and running before its UI or the trades_stream table will be available.
+
+Start Docker Desktop, open PowerShell in this repository and run:
 
 ```powershell
 .\deploy.ps1                         # Spark + Flink, or choose Spark only
 .\deploy.ps1 -SparkOnly              # omit the Flink containers
+.\deploy.ps1 -Jupyter                # opt in to JupyterLab
 .\deploy.ps1 -RunDemo                # also run all of sql/demo.sql
 .\deploy.ps1 -SkipNetCheck           # skip container DNS preflight
 .\destroy.ps1                       # remove local stack, preserve GCS resources
 $env:CLEANUP_GCS = '1'; .\destroy.ps1 # also remove eligible generated GCS resources
 ```
 
-Docker Desktop must be configured for Linux containers and the project drive
-must be available for file sharing. The scripts pass Windows bind mounts to
-the Terraform Docker provider in Docker Desktop's `/c/...` form. Terraform
-uses the native `scripts/bootstrap.ps1`; Unix deployments continue to use
-`scripts/bootstrap.sh`. Native Windows setup does not invoke Bash, WSL, or
-VirtualBox.
+Docker Desktop must be configured for Linux containers and the project drive must be available for file sharing. The scripts pass Windows bind mounts to
+the Terraform Docker provider in Docker Desktop's `/c/...` form. Terraform uses the native `scripts/bootstrap.ps1`; Unix deployments continue to use
+`scripts/bootstrap.sh`. Native Windows setup does not invoke Bash, WSL, or VirtualBox.
 
-PowerShell parameters map to the Unix environment switches: `-SparkOnly`
-corresponds to `ENABLE_FLINK=0`, `-RunDemo` to `RUN_DEMO=1`, and
-`-SkipNetCheck` to `SKIP_NET_CHECK=1`.
+PowerShell parameters map to the Unix environment switches: `-SparkOnly` corresponds to `ENABLE_FLINK=0`, `-RunDemo` to `RUN_DEMO=1`, and `-SkipNetCheck` to `SKIP_NET_CHECK=1`.
+
+Jupyter is an additive optional service and is off by default. Enable it with `-Jupyter`; it joins the lakehouse network, exposes its UI only on `127.0.0.1:8888`, and persists notebooks under `notebooks/`. Open [http://localhost:8888/lab](http://localhost:8888/lab) and retrieve the generated login token with `docker logs lake-jupyter`. The notebook receives connection settings for Spark Thrift (`spark-thrift:10000`), Lakekeeper, and MinIO. The existing lakehouse services are not modified by this opt-in.
+To enable it:
+
+```bash
+.\deploy.ps1 -Jupyter
+```
+
+Or, on Linux/maxOS:
+
+```bash
+ENABLE_JUPYTER=1 ./deploy.sh
+```
 
 ```bash
 ./deploy.sh
@@ -119,10 +140,11 @@ stack comes up **empty** so you can run each step yourself from the webapp.
 Set `RUN_DEMO=1` to batch the whole `sql/demo.sql` through beeline instead.
 
 ```bash
-./deploy.sh                          # bring up an empty stack (run steps in the webapp)
-RUN_DEMO=1 ./deploy.sh               # bring up + run all of demo.sql end-to-end
-./destroy.sh                         # tear down (local only, leaves any GCS bucket/SA)
-CLEANUP_GCS=1 ./destroy.sh           # also delete the auto-created GCS bucket + service account
+./deploy.sh                    # bring up an empty stack (run steps in the webapp)
+RUN_DEMO=1 ./deploy.sh         # bring up + run all of demo.sql end-to-end
+./destroy.sh                   # tear down (local only, leaves any GCS bucket/SA)
+CLEANUP_GCS=1 ./destroy.sh     # also delete the auto-created GCS bucket + service account
+ENABLE_JUPYTER=1 ./deploy.sh   # opt in to the separate JupyterLab container
 ```
 
 `destroy.sh` is local-only by default: it removes the containers and network but
@@ -134,11 +156,28 @@ propagation. Set
 `CLEANUP_GCS=1` when you actually want them gone; the script prints the manual
 `gcloud` commands either way.
 
+(Optional) DBeaver is a desktop database client. You can use it to connect to the Spark Thrift Server and run SQL queries in a graphical editor. It is separate from the web application at http://localhost:3030.
+
+Create a connection using Apache Hive (HiveServer2), then configure:
+
+- Host localhost
+- Port: 10000
+- Authentication: None (if offered)
+- Database: default
+
+DBeaver should use a Hive JDBC driver. The equivalent JDBC URL is:
+
+```text
+jdbc:hive2://localhost:10000
+```
+
 ### Manual
 
 ```bash
 terraform init
 terraform apply -auto-approve        # stands up the stack + bootstraps the warehouse
+# Optional, additive JupyterLab container (off by default)
+terraform apply -auto-approve -var="enable_jupyter=true"
 terraform output run_demo            # prints the beeline command
 docker exec spark-thrift /opt/spark/bin/beeline -u jdbc:hive2://localhost:10000 -f /opt/demo/demo.sql
 ```
@@ -181,12 +220,12 @@ gateway.)
 
 ### Why additive, not a Spark/Flink toggle
 
-The two engines are **not interchangeable**, so this is deliberately *not* an
+The two engines are **not interchangeable**, so this is deliberately _not_ an
 either/or switch. `sql/demo.sql` is Spark-dialect: it uses `MERGE INTO`, the
 `range()` table-valued function, Spark's `CALL` maintenance procedures, and
 Spark's `CREATE TABLE ... TBLPROPERTIES` DDL, none of which exist in Flink SQL
 (different `CREATE CATALOG ... WITH (...)` syntax, no `MERGE`, no `range()`,
-different maintenance). A Flink-*replacement* mode would force a thinner
+different maintenance). A Flink-_replacement_ mode would force a thinner
 Flink-only demo and drop roughly half the V3 features. So Flink is purely
 additive: Spark coverage stays complete, and you also get the streaming-interop
 story. Please don't "fix" this back into a toggle.
@@ -390,25 +429,25 @@ MinIO, and CI gating on every `sql/` change. The webapp&apos;s wrap-up page
 
 ## How V3 compares
 
-| Feature                            | Iceberg V1          | Iceberg V2                       | **Iceberg V3**                   | Delta Lake                       |
-| ---------------------------------- | ------------------- | -------------------------------- | -------------------------------- | -------------------------------- |
-| Row-level `DELETE` / `UPDATE`      | rewrite data files  | positional deletes (Parquet)     | **deletion vectors (Puffin)**    | deletion vectors (Roaring 64)    |
-| Row lineage (`_row_id`, seq #)     | no                  | no                               | **yes**                          | no                               |
-| Default column values              | no                  | no                               | **yes**                          | yes (3.x)                        |
-| `VARIANT` semi-structured type     | no                  | no                               | **yes (spec)**                   | yes                              |
-| Nanosecond timestamps              | no                  | no                               | **yes (spec)**                   | µs only                          |
-| Hidden partitioning                | yes                 | yes                              | yes                              | generated columns                |
-| Schema add / drop / rename / reorder | yes               | yes                              | yes                              | add / drop / rename              |
-| Time travel                        | yes                 | yes                              | yes                              | yes                              |
-| Open REST catalog spec             | no                  | yes                              | yes                              | Unity OSS / Hive                 |
-| Engine breadth                     | broad               | broad                            | broad                            | Spark-first, growing             |
+| Feature                              | Iceberg V1         | Iceberg V2                   | **Iceberg V3**                | Delta Lake                    |
+| ------------------------------------ | ------------------ | ---------------------------- | ----------------------------- | ----------------------------- |
+| Row-level `DELETE` / `UPDATE`        | rewrite data files | positional deletes (Parquet) | **deletion vectors (Puffin)** | deletion vectors (Roaring 64) |
+| Row lineage (`_row_id`, seq #)       | no                 | no                           | **yes**                       | no                            |
+| Default column values                | no                 | no                           | **yes**                       | yes (3.x)                     |
+| `VARIANT` semi-structured type       | no                 | no                           | **yes (spec)**                | yes                           |
+| Nanosecond timestamps                | no                 | no                           | **yes (spec)**                | µs only                       |
+| Hidden partitioning                  | yes                | yes                          | yes                           | generated columns             |
+| Schema add / drop / rename / reorder | yes                | yes                          | yes                           | add / drop / rename           |
+| Time travel                          | yes                | yes                          | yes                           | yes                           |
+| Open REST catalog spec               | no                 | yes                          | yes                           | Unity OSS / Hive              |
+| Engine breadth                       | broad              | broad                        | broad                         | Spark-first, growing          |
 
 Sources for the comparison are linked in the [footer](#sources).
 
 ## Caveats worth knowing
 
 - **Spark 3.5 + Iceberg 1.11** covers deletion vectors, row lineage, default
-  values, and maintenance. The newer V3 *types* (`VARIANT` and nanosecond
+  values, and maintenance. The newer V3 _types_ (`VARIANT` and nanosecond
   timestamps) need a **Spark 4.0** build and are intentionally left out of the
   core script. Bump `apache/spark` and the `iceberg-spark-runtime-4.0` package to
   add them.
@@ -530,7 +569,7 @@ register at all (check `docker logs lakekeeper`).
 
 The Iceberg sink commits a snapshot (and makes rows visible to Spark) **only
 on a completed checkpoint**. Without `execution.checkpointing.interval` the job
-runs, buffers rows, and commits *nothing*; Spark sees an empty table forever.
+runs, buffers rows, and commits _nothing_; Spark sees an empty table forever.
 `flink/config.yaml` sets a 10s checkpoint interval for exactly this reason, so
 don't remove it. Confirm checkpoints are completing at
 `http://localhost:8081` → the job → Checkpoints tab.
@@ -567,7 +606,7 @@ uses everywhere else in the demo. Flink 1.20 (iceberg-flink-runtime 1.11.0) writ
 the V3 appends, and Spark reads back the V3 **row lineage**: each row carries a
 `_row_id` and `_last_updated_sequence_number` the sink assigned. Because the stream
 only appends, there are no deletion vectors on this table. The piece that's still a
-stretch goal is the streaming *write* side of deletes: Flink equality-delete upserts
+stretch goal is the streaming _write_ side of deletes: Flink equality-delete upserts
 into a V3 stream.
 
 ---

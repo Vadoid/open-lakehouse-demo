@@ -2,7 +2,9 @@
 param(
     [switch]$SparkOnly,
     [switch]$RunDemo,
-    [switch]$SkipNetCheck
+    [switch]$SkipNetCheck,
+    # ADDITIVE OPTIONAL INTEGRATION — opt in to the separate JupyterLab container.
+    [switch]$Jupyter
 )
 $ErrorActionPreference = 'Stop'
 $env:TF_VAR_os_family = 'windows'
@@ -83,7 +85,9 @@ $mountSources = @(
     @{ Path = 'spark/spark-defaults.conf'; Directory = $false },
     @{ Path = 'sql'; Directory = $true },
     @{ Path = 'flink/config.yaml'; Directory = $false },
-    @{ Path = 'flink/sql'; Directory = $true }
+    @{ Path = 'flink/sql'; Directory = $true },
+    # ADDITIVE OPTIONAL INTEGRATION — persistent notebooks workspace.
+    @{ Path = 'notebooks'; Directory = $true }
 )
 foreach ($source in $mountSources) {
     $sourcePath = Join-Path $PSScriptRoot $source.Path
@@ -107,8 +111,9 @@ if ($networkId -and ($stateResources -notcontains 'docker_network.lake')) {
     if ($LASTEXITCODE -ne 0) { Write-Host '>> import failed; removing untracked network so Terraform can recreate it'; Invoke-Native docker @('network', 'rm', 'lakedemo') }
 }
 $flinkValue = if ($enableFlink) { 'true' } else { 'false' }
+$jupyterValue = if ($Jupyter) { 'true' } else { 'false' }
 Write-Host ">> terraform apply (enable_flink=$flinkValue)"
-Invoke-Native terraform @('apply', '-auto-approve', '-input=false', '-var', "enable_flink=$flinkValue")
+Invoke-Native terraform @('apply', '-auto-approve', '-input=false', '-var', "enable_flink=$flinkValue", '-var', "enable_jupyter=$jupyterValue")
 
 Write-Host -NoNewline '>> waiting for Spark Thrift Server'
 $thriftReady = $false
@@ -166,6 +171,12 @@ if ($enableFlink) {
         throw 'Flink did not register a taskmanager within 5 minutes. Review the Flink logs above.'
     }
     Write-Host 'Flink is up and idle. Start streaming from the webapp bonus step (step 19). Flink UI: http://localhost:8081'
+}
+
+# ADDITIVE OPTIONAL INTEGRATION — report the local JupyterLab URL when opted in.
+if ($Jupyter) {
+    Write-Host 'JupyterLab is available at http://localhost:8888/lab'
+    Write-Host 'Retrieve its generated login token with: docker logs lake-jupyter'
 }
 
 Write-Host "`nStack is up. Endpoints:"

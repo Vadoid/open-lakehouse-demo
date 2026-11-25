@@ -12,7 +12,7 @@ cd "$(dirname "$0")" || exit 1
 
 # flink-* are present only when deployed with the optional Flink engine; listing
 # them here is harmless when absent (sweep skips containers it can't inspect).
-CONTAINERS=(lake-postgres lake-minio lakekeeper lake-migrate spark-thrift demo-webapp flink-jobmanager flink-taskmanager)
+CONTAINERS=(lake-postgres lake-minio lakekeeper lake-migrate spark-thrift demo-webapp flink-jobmanager flink-taskmanager lake-jupyter)
 NETWORK=lakedemo
 
 # ---------------------------------------------------------------------------

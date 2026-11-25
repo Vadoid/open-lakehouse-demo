@@ -52,3 +52,5 @@ yarn-error.log*
 
 # Local webapp persisted state (storage config + SA key) — never commit
 .demo-state/
+
+wei_create_check.sh

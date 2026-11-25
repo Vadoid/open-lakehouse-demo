@@ -502,3 +502,41 @@ resource "docker_container" "webapp" {
     container_path = "/data"
   }
 }
+
+# ============================================================================
+# ADDITIVE OPTIONAL INTEGRATION — JUPYTERLAB
+# This isolated service is disabled by default. It joins the existing network
+# so notebooks can reach Spark Thrift, Lakekeeper, and MinIO. No core resource
+# above is modified by this opt-in component.
+# ============================================================================
+resource "docker_image" "jupyter" {
+  count = var.enable_jupyter ? 1 : 0
+  name  = "quay.io/jupyter/minimal-notebook:latest"
+}
+
+resource "docker_container" "jupyter" {
+  count      = var.enable_jupyter ? 1 : 0
+  name       = "lake-jupyter"
+  image      = docker_image.jupyter[0].image_id
+  depends_on = [docker_container.spark_thrift]
+  networks_advanced { name = docker_network.lake.name }
+  env = [
+    "SPARK_THRIFT_HOST=spark-thrift",
+    "SPARK_THRIFT_PORT=10000",
+    "LAKEKEEPER_URL=http://lakekeeper:8181/catalog",
+    "MINIO_ENDPOINT=http://lake-minio:9000",
+    "MINIO_ACCESS_KEY=${var.s3_access_key}",
+    "MINIO_SECRET_KEY=${var.s3_secret_key}",
+    "MINIO_BUCKET=${var.bucket}",
+  ]
+  ports {
+    internal = 8888
+    external = 8888
+    ip       = "127.0.0.1"
+  }
+  volumes {
+    host_path      = abspath("${path.module}/notebooks")
+    container_path = "/home/jovyan/work"
+  }
+  restart = "unless-stopped"
+}
