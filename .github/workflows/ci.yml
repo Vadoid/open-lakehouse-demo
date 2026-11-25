@@ -14,9 +14,9 @@ permissions:
   contents: read
 
 jobs:
-  # NOTE: these three job names (webapp, shell, terraform) are the stable
-  # required-status-check names referenced by CONTRIBUTING.md's branch-protection
-  # section. Renaming a job means updating that doc and the protection rule.
+  # NOTE: these five job names are the stable required-status-check names
+  # referenced by CONTRIBUTING.md's branch-protection section. Renaming a job
+  # means updating that doc and the protection rule.
   webapp:
     name: webapp
     runs-on: ubuntu-latest
@@ -65,3 +65,40 @@ jobs:
       - run: terraform fmt -check -recursive
       - run: terraform init -backend=false
       - run: terraform validate
+
+  windows:
+    name: windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse PowerShell deployment scripts
+        shell: pwsh
+        run: |
+          $targets = @('deploy.ps1', 'destroy.ps1', 'scripts/bootstrap.ps1')
+          foreach ($target in $targets) {
+            $path = Join-Path $env:GITHUB_WORKSPACE $target
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              $path, [ref]$tokens, [ref]$errors
+            ) > $null
+            if ($errors.Count -gt 0) {
+              $errors | ForEach-Object { Write-Error "${target}: $_" }
+              exit 1
+            }
+          }
+
+  integrations:
+    name: integrations
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Check Docker Compose is available
+        run: docker compose version
+      - name: Install pytest
+        run: python -m pip install -r requirements-test.txt
+      - name: Validate optional MLflow stack and notebook
+        run: python -m pytest tests -v

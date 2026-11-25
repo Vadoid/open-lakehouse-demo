@@ -71,7 +71,7 @@ other person is too.
 
 ## Continuous integration
 
-Every PR and every push to `main` runs `.github/workflows/ci.yml`, three
+Every PR and every push to `main` runs `.github/workflows/ci.yml`, five
 parallel jobs:
 
 - **`webapp`** — `npm ci`, `tsc --noEmit` (typecheck), and the Vitest unit
@@ -83,6 +83,17 @@ parallel jobs:
 - **`terraform`** — `terraform fmt -check -recursive`, then
   `init -backend=false` + `validate`. If `fmt` fails, run `terraform fmt` and
   commit the result.
+- **`windows`** — parses the PowerShell deploy, destroy, and bootstrap scripts
+  with PowerShell's AST parser on a Windows runner. This checks syntax without
+  starting Docker Desktop or changing infrastructure.
+- **`integrations`** — validates the optional MLflow Compose configuration and
+  checks the Jupyter MLflow quickstart notebook, including the default and
+  overridable MLflow server resource limits. It does not start containers.
+
+Run the optional integration checks locally with Python 3 and Docker Compose:
+`python -m pip install -r requirements-test.txt` followed by
+`python -m pytest tests -v`. The suite renders the Compose configuration but
+does not need a running Docker daemon.
 
 The tests are deliberately scoped to the pure helpers in `webapp/lib/`
 (formatting, config persistence, SQL highlighting, the step table, the file
@@ -92,20 +103,21 @@ surprised that coverage is reported only for the scoped files.
 
 ## Automerge / branch protection
 
-The three CI job names — **`webapp`**, **`shell`**, **`terraform`** — are the
-stable required status checks. To turn on GitHub-native auto-merge:
+The five CI job names — **`webapp`**, **`shell`**, **`terraform`**,
+**`windows`**, **`integrations`** — are the stable required status checks. To
+turn on GitHub-native auto-merge:
 
 1. **Settings → General → Pull Requests** → tick *Allow auto-merge*.
 2. **Settings → Branches** → add a branch-protection rule on `main`:
    - *Require status checks to pass before merging* → add `webapp`, `shell`,
-     `terraform`.
+     `terraform`, `windows`, `integrations`.
    - *Require branches to be up to date before merging* (optional but tidy).
    - Leave **Require approvals at `0`**. The gate here is the required *status
      checks*, not human approvals. If you require approvals, dependabot's
      auto-merge stalls — dependabot can't approve its own PR, and a
      `GITHUB_TOKEN` approval doesn't satisfy the rule.
 3. On a green PR, run `gh pr merge --auto` (or click *Enable auto-merge*). The
-   PR merges itself once all three checks pass.
+   PR merges itself once all five checks pass.
 
 Dependabot PRs are handled automatically by
 `.github/workflows/dependabot-automerge.yml`: it enables auto-merge on

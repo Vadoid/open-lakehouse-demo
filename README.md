@@ -149,23 +149,36 @@ By default, `destroy.sh` only acts locally: it removes containers and networks, 
 
 This standalone Compose project incorporates an open-source MLflow Tracking API and UI alongside a database-backed Model Registry. It is independent of the core lakehouse and has no impact on Terraform resources, the lakehouse database or the lakehouse artefact store. MLflow uses its own PostgreSQL database for runs and registry metadata, as well as its own Docker volume for model artefacts. These volumes will survive the 'docker compose down' command, but you should only remove them if you intend to erase MLflow data.
 
-To minimise its impact on a laptop, the optional MLflow tracking server is limited to 1 CPU and 1 GB of RAM, and its PostgreSQL service is limited to 0.5 CPUs and 768 MB of RAM. These Compose limits only apply to the MLflow add-on. They do not reserve these resources or affect Spark, Flink or any other core lakehouse service. After starting MLflow, check the actual usage with:
+For local use, MLflow starts with **one request worker**. Measure response time
+and resource use before increasing concurrency; add workers only if measurements
+show the server is the bottleneck. The MLflow tracking server is limited to 1 CPU
+and 1 GB of RAM, and its PostgreSQL service is limited to 0.5 CPUs and 768 MB of
+RAM. These Compose limits apply only to the MLflow add-on. They do not reserve
+these resources or affect Spark, Flink or any other core lakehouse service. After
+starting MLflow, check actual usage with:
 
 ```powershell
 docker stats --no-stream mlflow mlflow-db
 ```
 
-The MLflow server limits can be changed per PowerShell session with `MLFLOW_SERVER_CPUS` and `MLFLOW_SERVER_MEM_LIMIT`. For example, to give the server 2 CPUs and 2 GB RAM:
+The worker count and server limits can be changed per PowerShell session with
+`MLFLOW_SERVER_WORKERS`, `MLFLOW_SERVER_CPUS` and `MLFLOW_SERVER_MEM_LIMIT`.
+For example, after measuring and deciding the server needs two workers, 2 CPUs
+and 2 GB RAM:
 
 ```powershell
+$env:MLFLOW_SERVER_WORKERS = '2'
 $env:MLFLOW_SERVER_CPUS = '2.0'
 $env:MLFLOW_SERVER_MEM_LIMIT = '2g'
 docker compose -p mlflow -f .\mlflow\compose.yaml up -d
 ```
 
-The defaults are 1 CPU and 1 GB RAM. Compose recreates the server with the new limits; the MLflow database limits remain unchanged. Clear either override from the current PowerShell session to return that setting to its default:
+Defaults are one worker, 1 CPU and 1 GB RAM. Compose recreates the server with
+the new settings; the MLflow database limits remain unchanged. Clear overrides
+from the current PowerShell session to restore defaults:
 
 ```powershell
+Remove-Item Env:MLFLOW_SERVER_WORKERS -ErrorAction SilentlyContinue
 Remove-Item Env:MLFLOW_SERVER_CPUS -ErrorAction SilentlyContinue
 Remove-Item Env:MLFLOW_SERVER_MEM_LIMIT -ErrorAction SilentlyContinue
 ```
@@ -203,6 +216,8 @@ In a Python environment running on a Windows host, use `mlflow.set_tracking_uri(
 
 Open [JupyterLab](http://localhost:8888/lab), then open `02_mlflow_tracking_registry.ipynb` from the `work` directory. Run its cells in order. The first cell installs the matching MLflow client and scikit-learn in the running notebook container; repeat it if you recreate that container. The example trains a small regression model, logs parameters and an RMSE metric to the `lakehouse-ml-quickstart` experiment, and registers the model as
 `lakehouse-demo-regressor`. See the run under **Experiments** and the model under **Models** in [MLflow](http://localhost:5000).
+
+Run this notebook in the JupyterLab server at `http://localhost:8888/lab`, not with a local VS Code Python kernel such as `data_eng_env`. In VS Code, connect to the existing Jupyter server using the URL and token from `docker logs lake-jupyter`, then select its `Python 3 (ipykernel)` kernel. `%pip` installs packages into the selected kernel's Python environment.
 
 The notebook file persists under `notebooks/`, while the client packages are installed inside the optional Jupyter container. This step still leaves all
 core lakehouse services untouched.
