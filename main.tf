@@ -47,6 +47,10 @@ resource "docker_container" "postgres" {
     timeout  = "3s"
     retries  = 10
   }
+  # Block dependent resources until PostgreSQL's catalog database is actually
+  # accepting connections; `depends_on` alone only waits for container creation.
+  wait         = true
+  wait_timeout = 180
 }
 
 # ----------------------------------------------------------------------------
@@ -90,6 +94,11 @@ resource "docker_container" "lakekeeper_migrate" {
   must_run   = false
   attach     = true
   depends_on = [docker_container.postgres]
+  # Re-run the one-shot migration if PostgreSQL changes (including the new
+  # readiness-wait setting), so a prior failed startup is retried on apply.
+  lifecycle {
+    replace_triggered_by = [docker_container.postgres]
+  }
   networks_advanced { name = docker_network.lake.name }
   env = local.lakekeeper_env
 }
@@ -291,7 +300,7 @@ resource "docker_container" "flink_jobmanager" {
   # so flink/config.yaml re-supplies the Java-17 --add-opens flags (see comment
   # there) — without them the streaming job dies every checkpoint.
   volumes {
-    host_path      = abspath("${path.module}/flink/config.yaml")
+    host_path = abspath("${path.module}/flink/config.yaml")
     # Flink's startup config parser edits config.yaml in place. Stage the
     # read-only host config elsewhere, then copy it into the writable image dir.
     container_path = "/tmp/flink-config.yaml"
@@ -518,6 +527,12 @@ resource "docker_container" "jupyter" {
   count      = var.enable_jupyter ? 1 : 0
   name       = "lake-jupyter"
   image      = docker_image.jupyter[0].image_id
+  # Jupyter Docker Stacks accepts server options through start-notebook.py.
+  # Supplying a hash configures password auth and replaces the generated token.
+  command = concat(
+    ["start-notebook.py"],
+    var.jupyter_password_hash != "" ? ["--PasswordIdentityProvider.hashed_password=${var.jupyter_password_hash}"] : []
+  )
   depends_on = [docker_container.spark_thrift]
   networks_advanced { name = docker_network.lake.name }
   env = [

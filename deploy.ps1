@@ -3,13 +3,34 @@ param(
     [switch]$SparkOnly,
     [switch]$RunDemo,
     [switch]$SkipNetCheck,
+    [switch]$All,
+    # ADDITIVE OPTIONAL INTEGRATION — deploy Superset in its own Compose project.
+    [switch]$Superset,
     # ADDITIVE OPTIONAL INTEGRATION — opt in to the separate JupyterLab container.
-    [switch]$Jupyter
+    [switch]$Jupyter,
+    [ValidateSet('Token', 'Password')]
+    [string]$JupyterAuth = 'Token',
+    # Accept GNU-style --all and --superset aliases for PowerShell users.
+    [Parameter(ValueFromRemainingArguments = $true)]
+    [string[]]$ExtraArgs
 )
 $ErrorActionPreference = 'Stop'
 $env:TF_VAR_os_family = 'windows'
 $ProgressPreference = 'SilentlyContinue'
 Set-Location $PSScriptRoot
+
+if ($ExtraArgs) {
+    $unsupportedArgs = @($ExtraArgs | Where-Object { $_ -ine '--all' -and $_ -ine '--superset' })
+    if ($unsupportedArgs.Count -gt 0) {
+        throw "Unknown argument(s): $($unsupportedArgs -join ', '). Use -All/--all or -Superset/--superset."
+    }
+    if ($ExtraArgs -icontains '--all') { $All = $true }
+    if ($ExtraArgs -icontains '--superset') { $Superset = $true }
+}
+
+if ($All -and $SparkOnly) { throw '-All includes Flink; do not combine -All with -SparkOnly.' }
+if ($All) { $Jupyter = $true; $Superset = $true }
+if ($JupyterAuth -eq 'Password') { $Jupyter = $true }
 
 # PowerShell 7 can promote native stderr to terminating ErrorRecords. Docker
 # writes connection failures there, so disable that behavior for readiness
@@ -21,6 +42,22 @@ if (Get-Variable PSNativeCommandUseErrorActionPreference -ErrorAction SilentlyCo
 function Invoke-Native([string]$File, [string[]]$Arguments) {
     & $File @Arguments
     if ($LASTEXITCODE -ne 0) { throw "$File failed with exit code $LASTEXITCODE" }
+}
+
+function Wait-HttpEndpoint([string]$Name, [string]$Uri, [int]$Attempts = 60) {
+    Write-Host -NoNewline ">> waiting for $Name"
+    for ($i = 0; $i -lt $Attempts; $i++) {
+        try {
+            $null = Invoke-WebRequest -Uri $Uri -UseBasicParsing -TimeoutSec 3
+            Write-Host ' ready'
+            return
+        } catch {
+            Write-Host -NoNewline '.'
+            Start-Sleep -Seconds 2
+        }
+    }
+    Write-Host ''
+    throw "$Name did not become ready at $Uri. Check Docker logs and the service status."
 }
 
 foreach ($tool in @('docker', 'terraform')) {
@@ -51,8 +88,8 @@ if (-not $env:DOCKER_HOST) {
     if ($contextHost) { $env:DOCKER_HOST = $contextHost; Write-Host ">> DOCKER_HOST=$contextHost (from active Docker context)" }
 }
 
-$enableFlink = -not $SparkOnly
-if (-not $SparkOnly -and [Environment]::UserInteractive -and -not [Console]::IsInputRedirected) {
+$enableFlink = $All -or -not $SparkOnly
+if (-not $SparkOnly -and -not $All -and [Environment]::UserInteractive -and -not [Console]::IsInputRedirected) {
     Write-Host "`nEngine selection`n  1) Spark + Flink streaming (default)`n  2) Spark only"
     $choice = Read-Host 'Pick [1/2]'
     if ($choice -eq '2') { $enableFlink = $false }
@@ -112,6 +149,17 @@ if ($networkId -and ($stateResources -notcontains 'docker_network.lake')) {
 }
 $flinkValue = if ($enableFlink) { 'true' } else { 'false' }
 $jupyterValue = if ($Jupyter) { 'true' } else { 'false' }
+if ($Jupyter -and $JupyterAuth -eq 'Password') {
+    Write-Host 'Set the JupyterLab password (input is hidden).'
+    $passwordHash = @(& docker run --rm -it --entrypoint python quay.io/jupyter/minimal-notebook:latest -c 'from getpass import getpass; from jupyter_server.auth.security import passwd; print(passwd(getpass()))')
+    if ($LASTEXITCODE -ne 0) { throw 'Could not generate the Jupyter password hash.' }
+    $passwordHash = (($passwordHash | Select-Object -Last 1).ToString()).Trim()
+    if (-not $passwordHash.StartsWith('argon2:')) { throw 'Jupyter did not return a valid Argon2 password hash.' }
+    $env:TF_VAR_jupyter_password_hash = $passwordHash
+} else {
+    # The explicit Token choice clears a stale hash from this PowerShell session.
+    Remove-Item Env:TF_VAR_jupyter_password_hash -ErrorAction SilentlyContinue
+}
 Write-Host ">> terraform apply (enable_flink=$flinkValue)"
 Invoke-Native terraform @('apply', '-auto-approve', '-input=false', '-var', "enable_flink=$flinkValue", '-var', "enable_jupyter=$jupyterValue")
 
@@ -176,7 +224,49 @@ if ($enableFlink) {
 # ADDITIVE OPTIONAL INTEGRATION — report the local JupyterLab URL when opted in.
 if ($Jupyter) {
     Write-Host 'JupyterLab is available at http://localhost:8888/lab'
-    Write-Host 'Retrieve its generated login token with: docker logs lake-jupyter'
+    if ($JupyterAuth -eq 'Password') {
+        Write-Host 'JupyterLab password authentication is enabled.'
+    } else {
+        Write-Host 'Retrieve its generated login token with: docker logs lake-jupyter'
+    }
+}
+
+# ADDITIVE OPTIONAL INTEGRATION — Superset has its own Compose project and
+# joins lakedemo only after Terraform has created the core network.
+if ($Superset) {
+    $supersetCompose = Join-Path $PSScriptRoot 'superset\compose.yaml'
+    if (-not (Test-Path -LiteralPath $supersetCompose -PathType Leaf)) { throw "Required Compose file not found: $supersetCompose" }
+    Write-Host '>> starting optional Apache Superset'
+    & docker compose -p superset -f $supersetCompose up -d --build
+    if ($LASTEXITCODE -ne 0) {
+        $supersetExitCode = $LASTEXITCODE
+        Write-Host 'Recent Superset initializer logs:'
+        & docker logs --tail 100 superset-init
+        throw "Superset Compose startup failed with exit code $supersetExitCode."
+    }
+    Wait-HttpEndpoint 'Apache Superset' 'http://127.0.0.1:8088/health' 120
+    Write-Host 'Apache Superset: http://localhost:8088'
+}
+
+# ADDITIVE OPTIONAL INTEGRATIONS — -All starts the independent MLflow and
+# portal Compose projects only after Terraform has created the lakedemo network.
+if ($All) {
+    $mlflowCompose = Join-Path $PSScriptRoot 'mlflow\compose.yaml'
+    $portalCompose = Join-Path $PSScriptRoot 'portal\compose.yaml'
+    foreach ($composeFile in @($mlflowCompose, $portalCompose)) {
+        if (-not (Test-Path -LiteralPath $composeFile -PathType Leaf)) { throw "Required Compose file not found: $composeFile" }
+    }
+
+    Write-Host '>> starting optional MLflow Tracking Server and Model Registry'
+    Invoke-Native docker @('compose', '-p', 'mlflow', '-f', $mlflowCompose, 'up', '-d')
+    Wait-HttpEndpoint 'MLflow' 'http://127.0.0.1:5000/health' 60
+
+    Write-Host '>> starting standalone Open Lakehouse portal'
+    Invoke-Native docker @('compose', '-p', 'open-lakehouse-portal', '-f', $portalCompose, 'up', '-d')
+    Wait-HttpEndpoint 'Open Lakehouse portal' 'http://127.0.0.1:3050/' 30
+
+    Write-Host 'MLflow UI: http://localhost:5000'
+    Write-Host 'Open Lakehouse portal: http://127.0.0.1:3050'
 }
 
 Write-Host "`nStack is up. Endpoints:"

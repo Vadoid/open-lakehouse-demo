@@ -12,6 +12,42 @@ cd "$(dirname "$0")"
 ENABLE_FLINK="${ENABLE_FLINK:-1}"
 # ADDITIVE OPTIONAL INTEGRATION — JupyterLab stays off unless explicitly opted in.
 ENABLE_JUPYTER="${ENABLE_JUPYTER:-0}"
+JUPYTER_AUTH="${JUPYTER_AUTH:-token}"
+DEPLOY_ALL=0
+DEPLOY_SUPERSET=0
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --all) DEPLOY_ALL=1 ;;
+    --superset) DEPLOY_SUPERSET=1 ;;
+    --jupyter) ENABLE_JUPYTER=1 ;;
+    --jupyter-auth)
+      if [ "$#" -lt 2 ]; then echo "--jupyter-auth requires token or password" >&2; exit 2; fi
+      shift
+      JUPYTER_AUTH="$1"
+      ENABLE_JUPYTER=1
+      ;;
+    -h|--help)
+      echo "Usage: ./deploy.sh [--jupyter] [--jupyter-auth token|password] [--superset] [--all]"
+      echo "  default  Deploy the core lakehouse (Spark + Flink by default)"
+      echo "  --jupyter  Also deploy JupyterLab (token authentication by default)"
+      echo "  --jupyter-auth  Choose token or password authentication (enables JupyterLab)"
+      echo "  --superset  Also deploy Apache Superset as a separate add-on"
+      echo "  --all    Also deploy JupyterLab, Superset, MLflow, and the service portal"
+      exit 0
+      ;;
+    *) echo "Unknown option: $1 (try --help)" >&2; exit 2 ;;
+  esac
+  shift
+done
+if [ "${JUPYTER_AUTH}" != "token" ] && [ "${JUPYTER_AUTH}" != "password" ]; then
+  echo "!! JUPYTER_AUTH must be token or password" >&2
+  exit 2
+fi
+if [ "${DEPLOY_ALL}" = "1" ]; then
+  ENABLE_FLINK=1
+  ENABLE_JUPYTER=1
+  DEPLOY_SUPERSET=1
+fi
 
 # ---------------------------------------------------------------------------
 # 0. Engine selection (interactive).
@@ -30,6 +66,10 @@ ENABLE_JUPYTER="${ENABLE_JUPYTER:-0}"
 # keep the default (Spark + Flink) — unless ENABLE_FLINK=0 was passed to opt out.
 # ---------------------------------------------------------------------------
 select_engine() {
+  if [ "${DEPLOY_ALL}" = "1" ]; then
+    echo ">> --all selected — Spark + Flink and all optional services enabled"
+    return
+  fi
   if [ "${ENABLE_FLINK}" = "0" ]; then
     echo ">> ENABLE_FLINK=0 — Spark only, Flink disabled (menu skipped)"
     return
@@ -363,6 +403,23 @@ run_terraform() {
     terraform init -input=false
   fi
   reconcile_orphan_network
+  if [ "${ENABLE_JUPYTER}" = "1" ] && [ "${JUPYTER_AUTH}" = "password" ]; then
+    if [ ! -t 0 ]; then
+      echo "!! Password mode needs an interactive terminal; rerun from a terminal or use --jupyter-auth token." >&2
+      return 2
+    fi
+    read -r -s -p "Set the JupyterLab password: " jupyter_password
+    printf '\n'
+    jupyter_password_hash="$(printf '%s' "${jupyter_password}" | docker run --rm -i --entrypoint python quay.io/jupyter/minimal-notebook:latest -c 'import sys; from jupyter_server.auth.security import passwd; print(passwd(sys.stdin.readline().rstrip("\n")))')"
+    unset jupyter_password
+    if [[ "${jupyter_password_hash}" != argon2:* ]]; then
+      echo "!! Could not generate a valid Argon2 password hash." >&2
+      return 1
+    fi
+    export TF_VAR_jupyter_password_hash="${jupyter_password_hash}"
+  else
+    unset TF_VAR_jupyter_password_hash
+  fi
   echo ">> terraform apply (enable_flink=$([ "${ENABLE_FLINK}" = "1" ] && echo true || echo false), enable_jupyter=$([ "${ENABLE_JUPYTER}" = "1" ] && echo true || echo false))"
   # Map the engine choice to the Terraform bool. Flink resources are count-gated
   # on enable_flink, so false => zero Flink containers, byte-for-byte the
@@ -454,6 +511,51 @@ INTEROP
 }
 
 # ---------------------------------------------------------------------------
+# 4. Optional Compose add-ons. They start only after Terraform has created the
+# lakedemo network. No core Terraform resources are changed by these services.
+# ---------------------------------------------------------------------------
+wait_for_http() {
+  local name="$1" url="$2" attempts="${3:-60}"
+  echo -n ">> waiting for ${name}"
+  for _ in $(seq 1 "${attempts}"); do
+    if curl -fsS --max-time 3 "${url}" >/dev/null 2>&1; then
+      echo " — ready"
+      return 0
+    fi
+    echo -n "."
+    sleep 2
+  done
+  echo
+  echo "!! ${name} did not become ready at ${url}"
+  exit 1
+}
+
+start_optional_addons() {
+  [ "${DEPLOY_ALL}" = "1" ] || [ "${DEPLOY_SUPERSET}" = "1" ] || return 0
+  docker compose version >/dev/null 2>&1 || {
+    echo "!! Docker Compose v2 is required for optional add-ons" >&2
+    exit 1
+  }
+  if [ "${DEPLOY_SUPERSET}" = "1" ]; then
+    echo ">> starting optional Apache Superset"
+    if ! docker compose -p superset -f ./superset/compose.yaml up -d --build; then
+      echo "!! Superset Compose startup failed. Recent initializer logs:" >&2
+      docker logs --tail 100 superset-init 2>&1 || true
+      exit 1
+    fi
+    wait_for_http "Apache Superset" "http://127.0.0.1:8088/health" 120
+  fi
+  [ "${DEPLOY_ALL}" = "1" ] || return 0
+  echo ">> starting optional MLflow Tracking Server and Model Registry"
+  docker compose -p mlflow -f ./mlflow/compose.yaml up -d
+  wait_for_http "MLflow" "http://127.0.0.1:5000/health" 60
+
+  echo ">> starting standalone Open Lakehouse portal"
+  docker compose -p open-lakehouse-portal -f ./portal/compose.yaml up -d
+  wait_for_http "Open Lakehouse portal" "http://127.0.0.1:3050/" 30
+}
+
+# ---------------------------------------------------------------------------
 # 4. Run demo SQL (opt-in only).
 # The stack comes up EMPTY by default so the webapp clickthrough starts from a
 # blank catalog and the user runs each step themselves. Set RUN_DEMO=1 to batch
@@ -480,9 +582,29 @@ wait_for_thrift
 run_demo
 wait_for_flink
 verify_flink_stream
+start_optional_addons
 
 echo
 echo "Stack is up. Endpoints:"
 terraform output
 echo
 echo "Webapp: http://localhost:3030 (External: http://$(curl -s https://ifconfig.me/ip):3030)"
+if [ "${DEPLOY_ALL}" = "1" ]; then
+  if [ "${JUPYTER_AUTH}" = "password" ]; then
+    echo "JupyterLab: http://localhost:8888/lab (password authentication enabled)"
+  else
+    echo "JupyterLab: http://localhost:8888/lab (token: docker logs lake-jupyter)"
+  fi
+  echo "MLflow: http://localhost:5000"
+  echo "Apache Superset: http://localhost:8088"
+  echo "Open Lakehouse portal: http://127.0.0.1:3050"
+elif [ "${ENABLE_JUPYTER}" = "1" ]; then
+  if [ "${JUPYTER_AUTH}" = "password" ]; then
+    echo "JupyterLab: http://localhost:8888/lab (password authentication enabled)"
+  else
+    echo "JupyterLab: http://localhost:8888/lab (token: docker logs lake-jupyter)"
+  fi
+fi
+if [ "${DEPLOY_SUPERSET}" = "1" ] && [ "${DEPLOY_ALL}" != "1" ]; then
+  echo "Apache Superset: http://localhost:8088"
+fi
