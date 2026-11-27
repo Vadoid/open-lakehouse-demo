@@ -21,10 +21,12 @@ if ! docker network inspect "${NET}" >/dev/null 2>&1; then
 fi
 echo ">> using network '${NET}'"
 
-docker run --rm --network "${NET}" --entrypoint /bin/sh minio/mc -c "
-  mc alias set lake http://lake-minio:9000 '${S3_ACCESS_KEY}' '${S3_SECRET_KEY}' &&
-  mc mb --ignore-existing lake/${BUCKET}
-"
+
+docker run --rm --network "${NET}" \
+  -e "MC_HOST_lake=http://${S3_ACCESS_KEY}:${S3_SECRET_KEY}@lake-minio:9000" \
+  --entrypoint mc \
+  cgr.dev/chainguard/minio-client:latest \
+  mb --ignore-existing "lake/${BUCKET}"
 
 echo ">> bootstrapping Lakekeeper (sets initial admin / first project)..."
 curl -sf -X POST "${LK}/management/v1/bootstrap" \

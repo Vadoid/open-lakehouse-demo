@@ -1,0 +1,7 @@
+# Keep Terraform heredocs and Linux container scripts/configs LF on Windows.
+*.tf text eol=lf
+*.sh text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.sql text eol=lf
+*.conf text eol=lf

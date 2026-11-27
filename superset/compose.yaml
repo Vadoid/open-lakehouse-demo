@@ -1,0 +1,86 @@
+# ADDITIVE OPTIONAL INTEGRATION — standalone Superset BI UI and metadata DB.
+# This project joins the core Docker network only to query Spark Thrift.
+x-superset-environment: &superset-environment
+  SUPERSET_CONFIG_PATH: /app/pythonpath/superset_config.py
+  SUPERSET_SECRET_KEY: ${SUPERSET_SECRET_KEY:-open-lakehouse-local-superset-secret-change-before-sharing}
+  SUPERSET_ADMIN_USERNAME: ${SUPERSET_ADMIN_USERNAME:-admin}
+  SUPERSET_ADMIN_PASSWORD: ${SUPERSET_ADMIN_PASSWORD:-admin}
+  SUPERSET_DB_USER: ${SUPERSET_DB_USER:-superset}
+  SUPERSET_DB_PASSWORD: ${SUPERSET_DB_PASSWORD:-superset-local-only}
+  SUPERSET_DB_HOST: superset-db
+  SUPERSET_DB_PORT: "5432"
+  SUPERSET_DB_NAME: superset
+  SUPERSET_WEBSERVER_WORKERS: ${SUPERSET_WEBSERVER_WORKERS:-1}
+
+services:
+  superset-db:
+    image: postgres:16
+    container_name: superset-db
+    restart: unless-stopped
+    cpus: ${SUPERSET_DB_CPUS:-0.5}
+    mem_limit: ${SUPERSET_DB_MEM_LIMIT:-512m}
+    environment:
+      POSTGRES_DB: superset
+      POSTGRES_USER: ${SUPERSET_DB_USER:-superset}
+      POSTGRES_PASSWORD: ${SUPERSET_DB_PASSWORD:-superset-local-only}
+    volumes:
+      - superset-db:/var/lib/postgresql/data
+    networks:
+      - superset-private
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  superset-init:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: open-lakehouse-superset:6.1.0
+    container_name: superset-init
+    restart: "no"
+    environment: *superset-environment
+    command: ["/bin/sh", "/app/docker/init-superset.sh"]
+    depends_on:
+      superset-db:
+        condition: service_healthy
+    volumes:
+      - superset-home:/app/superset_home
+    networks:
+      - superset-private
+
+  superset:
+    image: open-lakehouse-superset:6.1.0
+    container_name: superset
+    restart: unless-stopped
+    cpus: ${SUPERSET_SERVER_CPUS:-1.0}
+    mem_limit: ${SUPERSET_SERVER_MEM_LIMIT:-2g}
+    environment: *superset-environment
+    depends_on:
+      superset-init:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:8088:8088"
+    volumes:
+      - superset-home:/app/superset_home
+    networks:
+      - superset-private
+      - lakedemo
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8088/health >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+volumes:
+  superset-db:
+  superset-home:
+
+networks:
+  superset-private:
+    internal: true
+  lakedemo:
+    name: lakedemo
+    external: true

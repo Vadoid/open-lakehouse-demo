@@ -47,13 +47,17 @@ resource "docker_container" "postgres" {
     timeout  = "3s"
     retries  = 10
   }
+  # Block dependent resources until PostgreSQL's catalog database is actually
+  # accepting connections; `depends_on` alone only waits for container creation.
+  wait         = true
+  wait_timeout = 180
 }
 
 # ----------------------------------------------------------------------------
 # MinIO  (S3-compatible object store for the Iceberg warehouse)
 # ----------------------------------------------------------------------------
 resource "docker_image" "minio" {
-  name = "minio/minio:RELEASE.2025-04-22T22-12-26Z"
+  name = "cgr.dev/chainguard/minio:latest"
 }
 
 resource "docker_container" "minio" {
@@ -90,6 +94,11 @@ resource "docker_container" "lakekeeper_migrate" {
   must_run   = false
   attach     = true
   depends_on = [docker_container.postgres]
+  # Re-run the one-shot migration if PostgreSQL changes (including the new
+  # readiness-wait setting), so a prior failed startup is retried on apply.
+  lifecycle {
+    replace_triggered_by = [docker_container.postgres]
+  }
   networks_advanced { name = docker_network.lake.name }
   env = local.lakekeeper_env
 }
@@ -127,7 +136,10 @@ resource "null_resource" "bootstrap" {
   depends_on = [docker_container.lakekeeper, docker_container.minio]
   triggers   = { always = timestamp() }
   provisioner "local-exec" {
-    command = "${path.module}/scripts/bootstrap.sh"
+    # Terraform's default shell on Windows is cmd.exe. Select PowerShell there;
+    # keep the existing Bash bootstrap for Linux and macOS.
+    interpreter = var.os_family == "windows" ? ["PowerShell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command"] : ["bash", "-c"]
+    command     = var.os_family == "windows" ? "& '${replace(path.module, "'", "''")}/scripts/bootstrap.ps1'" : "${path.module}/scripts/bootstrap.sh"
     environment = {
       NETWORK       = docker_network.lake.name
       S3_ACCESS_KEY = var.s3_access_key
@@ -288,8 +300,10 @@ resource "docker_container" "flink_jobmanager" {
   # so flink/config.yaml re-supplies the Java-17 --add-opens flags (see comment
   # there) — without them the streaming job dies every checkpoint.
   volumes {
-    host_path      = abspath("${path.module}/flink/config.yaml")
-    container_path = "/opt/flink/conf/config.yaml"
+    host_path = abspath("${path.module}/flink/config.yaml")
+    # Flink's startup config parser edits config.yaml in place. Stage the
+    # read-only host config elsewhere, then copy it into the writable image dir.
+    container_path = "/tmp/flink-config.yaml"
     read_only      = true
   }
   # stream.sql — submitted by the resubmit supervisor via sql-client.sh -f.
@@ -330,6 +344,7 @@ resource "docker_container" "flink_jobmanager" {
     "/bin/bash", "-c",
     <<-EOT
       ${local.flink_jar_stage}
+      cp /tmp/flink-config.yaml /opt/flink/conf/config.yaml
       # Start the JM as a background daemon so this script (container PID 1) stays
       # in the foreground as the supervisor. (start-foreground would block here.)
       /opt/flink/bin/jobmanager.sh start
@@ -426,12 +441,12 @@ resource "docker_container" "flink_taskmanager" {
   # the taskmanager runs the sink operator, so it needs the Iceberg jars too.
   volumes {
     host_path      = abspath("${path.module}/flink/config.yaml")
-    container_path = "/opt/flink/conf/config.yaml"
+    container_path = "/tmp/flink-config.yaml"
     read_only      = true
   }
   command = [
     "/bin/bash", "-c",
-    "${local.flink_jar_stage}\n/opt/flink/bin/taskmanager.sh start-foreground",
+    "${local.flink_jar_stage}\ncp /tmp/flink-config.yaml /opt/flink/conf/config.yaml\n/opt/flink/bin/taskmanager.sh start-foreground",
   ]
   restart = "unless-stopped"
 }
@@ -495,4 +510,48 @@ resource "docker_container" "webapp" {
     host_path      = abspath("${path.module}/.demo-state")
     container_path = "/data"
   }
+}
+
+# ============================================================================
+# ADDITIVE OPTIONAL INTEGRATION — JUPYTERLAB
+# This isolated service is disabled by default. It joins the existing network
+# so notebooks can reach Spark Thrift, Lakekeeper, and MinIO. No core resource
+# above is modified by this opt-in component.
+# ============================================================================
+resource "docker_image" "jupyter" {
+  count = var.enable_jupyter ? 1 : 0
+  name  = "quay.io/jupyter/minimal-notebook:latest"
+}
+
+resource "docker_container" "jupyter" {
+  count      = var.enable_jupyter ? 1 : 0
+  name       = "lake-jupyter"
+  image      = docker_image.jupyter[0].image_id
+  # Jupyter Docker Stacks accepts server options through start-notebook.py.
+  # Supplying a hash configures password auth and replaces the generated token.
+  command = concat(
+    ["start-notebook.py"],
+    var.jupyter_password_hash != "" ? ["--PasswordIdentityProvider.hashed_password=${var.jupyter_password_hash}"] : []
+  )
+  depends_on = [docker_container.spark_thrift]
+  networks_advanced { name = docker_network.lake.name }
+  env = [
+    "SPARK_THRIFT_HOST=spark-thrift",
+    "SPARK_THRIFT_PORT=10000",
+    "LAKEKEEPER_URL=http://lakekeeper:8181/catalog",
+    "MINIO_ENDPOINT=http://lake-minio:9000",
+    "MINIO_ACCESS_KEY=${var.s3_access_key}",
+    "MINIO_SECRET_KEY=${var.s3_secret_key}",
+    "MINIO_BUCKET=${var.bucket}",
+  ]
+  ports {
+    internal = 8888
+    external = 8888
+    ip       = "127.0.0.1"
+  }
+  volumes {
+    host_path      = abspath("${path.module}/notebooks")
+    container_path = "/home/jovyan/work"
+  }
+  restart = "unless-stopped"
 }

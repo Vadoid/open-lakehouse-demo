@@ -1,0 +1,2 @@
+# No third-party test dependencies. Run checks with:
+#   python tests/test_optional_integrations.py

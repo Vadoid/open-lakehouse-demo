@@ -1,0 +1,68 @@
+# ADDITIVE OPTIONAL INTEGRATION — standalone MLflow Tracking Server + Model Registry.
+# This Compose project does not alter the Terraform-managed lakehouse services.
+services:
+  mlflow-db:
+    image: postgres:16
+    container_name: mlflow-db
+    restart: unless-stopped
+    # ADDITIVE RESOURCE GUARDRAIL — cap only this optional MLflow database.
+    cpus: 0.5
+    mem_limit: 768m
+    environment:
+      POSTGRES_DB: mlflow
+      POSTGRES_USER: mlflow
+      POSTGRES_PASSWORD: ${MLFLOW_DB_PASSWORD:-local-demo-only}
+    volumes:
+      - mlflow-db:/var/lib/postgresql/data
+    networks:
+      - mlflow-private
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mlflow -d mlflow"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v3.17.2-full
+    container_name: mlflow
+    restart: unless-stopped
+    # ADDITIVE RESOURCE GUARDRAIL — cap only the optional tracking server.
+    cpus: ${MLFLOW_SERVER_CPUS:-1.0}
+    mem_limit: ${MLFLOW_SERVER_MEM_LIMIT:-1g}
+    depends_on:
+      mlflow-db:
+        condition: service_healthy
+    command:
+      - mlflow
+      - server
+      - --host
+      - 0.0.0.0
+      - --port
+      - "5000"
+      # Start small for a local demo; increase only after measuring.
+      - --workers
+      - ${MLFLOW_SERVER_WORKERS:-1}
+      - --backend-store-uri
+      - postgresql://mlflow:${MLFLOW_DB_PASSWORD:-local-demo-only}@mlflow-db:5432/mlflow
+      - --artifacts-destination
+      - /mlartifacts
+      - --allowed-hosts
+      - localhost:5000,127.0.0.1:5000,mlflow:5000
+    ports:
+      - "127.0.0.1:5000:5000"
+    volumes:
+      - mlflow-artifacts:/mlartifacts
+    networks:
+      - mlflow-private
+      - lakedemo
+
+volumes:
+  mlflow-db:
+  mlflow-artifacts:
+
+networks:
+  mlflow-private:
+    internal: true
+  lakedemo:
+    name: lakedemo
+    external: true

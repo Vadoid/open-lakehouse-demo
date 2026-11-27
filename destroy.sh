@@ -10,9 +10,13 @@ set -uo pipefail   # intentionally NOT -e: cleanup is best-effort, keep going
 
 cd "$(dirname "$0")" || exit 1
 
+# Jupyter credentials are deploy-only inputs; clear inherited values so a stale
+# hash cannot block Terraform destroy's variable validation.
+unset TF_VAR_jupyter_password_hash
+
 # flink-* are present only when deployed with the optional Flink engine; listing
 # them here is harmless when absent (sweep skips containers it can't inspect).
-CONTAINERS=(lake-postgres lake-minio lakekeeper lake-migrate spark-thrift demo-webapp flink-jobmanager flink-taskmanager)
+CONTAINERS=(lake-postgres lake-minio lakekeeper lake-migrate spark-thrift demo-webapp flink-jobmanager flink-taskmanager lake-jupyter mlflow mlflow-db superset superset-db superset-init open-lakehouse-portal)
 NETWORK=lakedemo
 
 # ---------------------------------------------------------------------------
@@ -47,6 +51,27 @@ if [ -z "${DOCKER_HOST:-}" ]; then
   if [ -n "${ctx_host}" ]; then
     export DOCKER_HOST="${ctx_host}"
     echo ">> DOCKER_HOST=${DOCKER_HOST} (from active docker context)"
+  fi
+fi
+
+# Optional Compose add-ons join the lakedemo network for service links and
+# monitoring. Stop them before Terraform removes the external network. `down`
+# preserves their named data volumes.
+if docker info >/dev/null 2>&1; then
+  if docker inspect mlflow >/dev/null 2>&1; then
+    echo ">> stopping optional MLflow add-on (keeping its data volumes)"
+    docker compose -p mlflow -f ./mlflow/compose.yaml down \
+      || echo "!! could not stop MLflow; it may keep lakedemo attached"
+  fi
+  if docker inspect open-lakehouse-portal >/dev/null 2>&1; then
+    echo ">> stopping standalone portal before removing lakedemo"
+    docker compose -p open-lakehouse-portal -f ./portal/compose.yaml down \
+      || echo "!! could not stop portal; it may keep lakedemo attached"
+  fi
+  if docker inspect superset >/dev/null 2>&1 || docker inspect superset-db >/dev/null 2>&1 || docker inspect superset-init >/dev/null 2>&1; then
+    echo ">> stopping optional Apache Superset (keeping its data volumes)"
+    docker compose -p superset -f ./superset/compose.yaml down \
+      || echo "!! could not stop Superset; it may keep lakedemo attached"
   fi
 fi
 

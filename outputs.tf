@@ -32,3 +32,9 @@ output "flink_ui" {
 output "flink_interop_check" {
   value = "docker exec spark-thrift /opt/spark/bin/beeline -u jdbc:hive2://localhost:10000 -e \"SELECT count(*) FROM demo.market.trades_stream;\"  (run twice ~10s apart; count climbs — if Flink enabled)"
 }
+
+# ADDITIVE OPTIONAL INTEGRATION — only creates the Jupyter container when
+# enable_jupyter=true. Retrieve its generated login token from container logs.
+output "jupyter_lab" {
+  value = var.enable_jupyter ? "http://localhost:8888/lab  (token: docker logs lake-jupyter)" : "disabled (opt in with enable_jupyter=true)"
+}

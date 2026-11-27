@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#080b10" />
+    <title>Open Lakehouse</title>
+    <style>
+      :root { color-scheme: dark; --bg:#080b10; --surface:#10151d; --hover:#151e29; --line:#26313e; --text:#edf3f8; --muted:#95a2b2; --ice:#8bd8e8; --green:#8ce0b2; --violet:#c6a7ff; --danger:#ff9b9b; }
+      :root[data-theme="light"] { color-scheme:light; --bg:#f3f7fa; --surface:#fff; --hover:#f2f8fb; --line:#d7e0e8; --text:#16212b; --muted:#5f6f7d; --ice:#087e99; --green:#21834e; --violet:#7554ad; --danger:#b42318; }
+      * { box-sizing:border-box; }
+      body { min-height:100vh; margin:0; background:radial-gradient(ellipse at 50% 0%, rgba(56,120,143,.18), transparent 42rem),var(--bg); color:var(--text); font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; transition:background .2s,color .2s; }
+      .shell { width:min(1040px,calc(100% - 40px)); min-height:100vh; margin:0 auto; display:flex; flex-direction:column; }
+      .topbar { display:flex; align-items:center; justify-content:space-between; gap:14px; padding:22px 0; color:var(--text); font-size:13px; font-weight:650; }
+      .brand { display:flex; align-items:center; gap:11px; }
+      .mark { width:29px; height:29px; display:grid; place-items:center; border:1px solid color-mix(in srgb,var(--ice) 45%,transparent); border-radius:9px; color:var(--ice); background:color-mix(in srgb,var(--ice) 12%,transparent); font-size:17px; }
+      button { color:inherit; font:inherit; }
+      .settings-button,.refresh-button,.dialog-button { border:1px solid var(--line); border-radius:9px; background:var(--surface); color:var(--muted); padding:9px 12px; cursor:pointer; }
+      .settings-button:hover,.refresh-button:hover,.dialog-button:hover { border-color:var(--ice); color:var(--ice); }
+      main { width:100%; margin:auto 0; padding:26px 0 54px; }
+      .intro { max-width:650px; margin:0 auto 30px; text-align:center; }
+      .eyebrow { display:inline-flex; align-items:center; gap:8px; padding:7px 11px; border:1px solid color-mix(in srgb,var(--ice) 25%,transparent); border-radius:999px; color:var(--ice); background:color-mix(in srgb,var(--ice) 8%,transparent); font-size:10px; font-weight:750; letter-spacing:.15em; text-transform:uppercase; }
+      .eyebrow::before { content:""; width:6px; height:6px; border-radius:50%; background:var(--green); box-shadow:0 0 12px var(--green); }
+      h1 { margin:19px 0 10px; font-size:clamp(38px,7vw,62px); line-height:1.04; letter-spacing:-.055em; }
+      .subtitle { margin:0; color:var(--muted); font-size:15px; line-height:1.7; }
+      .monitor { display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:10px; margin:23px 0 37px; color:var(--muted); font-size:11px; }
+      .monitor-summary { display:inline-flex; align-items:center; gap:7px; }
+      .summary-dot,.state-dot { display:inline-block; width:7px; height:7px; border-radius:50%; background:#8391a0; }
+      .summary-dot.online,.state-dot.online { background:var(--green); box-shadow:0 0 10px color-mix(in srgb,var(--green) 65%,transparent); }
+      .summary-dot.offline,.state-dot.offline { background:var(--danger); }
+      .summary-dot.checking,.state-dot.checking { background:#e3ba63; animation:pulse 1.3s infinite; }
+      @keyframes pulse { 50% { opacity:.35; } }
+      .section-label { margin:0 0 13px 2px; color:var(--muted); opacity:.75; font-size:10px; font-weight:750; letter-spacing:.15em; text-transform:uppercase; }
+      .grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:13px; }
+      .card { min-height:146px; padding:18px; overflow:hidden; border:1px solid var(--line); border-radius:14px; background:linear-gradient(145deg,rgba(128,160,180,.035),transparent 75%),var(--surface); color:inherit; text-decoration:none; transition:transform .16s,border-color .16s,background .16s; }
+      a.card:hover,button.card:hover { transform:translateY(-2px); border-color:color-mix(in srgb,var(--ice) 55%,var(--line)); background-color:var(--hover); }
+      a.card:focus-visible,button.card:focus-visible,.settings-button:focus-visible,.refresh-button:focus-visible { outline:2px solid var(--ice); outline-offset:3px; }
+      .card-head { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+      .icon { width:37px; height:37px; display:grid; place-items:center; border:1px solid color-mix(in srgb,var(--ice) 18%,transparent); border-radius:11px; color:var(--ice); background:color-mix(in srgb,var(--ice) 9%,transparent); font-size:16px; font-weight:700; }
+      .meta { display:flex; align-items:center; gap:6px; color:var(--muted); font-size:9px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
+      .meta.optional { color:var(--violet); }
+      .card h2 { margin:15px 0 5px; font-size:14px; letter-spacing:-.01em; }
+      .card p { margin:0; color:var(--muted); font-size:11px; line-height:1.55; }
+      .arrow { color:var(--muted); font-size:16px; }
+      a.card:hover .arrow { transform:translate(2px,-2px); color:var(--ice); }
+      button.card { width:100%; text-align:left; cursor:pointer; }
+      #copy-status { min-height:15px; margin-top:7px; color:var(--green); font-size:10px; }
+      .optional-heading { margin-top:28px; }
+      [hidden] { display:none !important; }
+      footer { display:flex; justify-content:space-between; gap:12px; padding:20px 0 24px; border-top:1px solid color-mix(in srgb,var(--line) 75%,transparent); color:var(--muted); font-size:10px; }
+      footer a { color:var(--text); text-decoration:none; }
+      footer a:hover { color:var(--ice); }
+      dialog { width:min(540px,calc(100% - 28px)); max-height:min(88vh,780px); padding:0; border:1px solid var(--line); border-radius:16px; background:var(--surface); color:var(--text); box-shadow:0 25px 90px #0009; }
+      dialog::backdrop { background:#02050ac9; backdrop-filter:blur(5px); }
+      .dialog-head { display:flex; align-items:center; justify-content:space-between; padding:20px 22px; border-bottom:1px solid var(--line); }
+      .dialog-head h2 { margin:0; font-size:16px; }
+      .close-button { border:0; background:none; color:var(--muted); font-size:21px; cursor:pointer; }
+      .settings-form { display:grid; gap:18px; max-height:calc(88vh - 145px); overflow:auto; padding:20px 22px; }
+      .setting { display:grid; gap:7px; }
+      .setting label,.settings-form legend { color:var(--muted); font-size:11px; font-weight:650; }
+      .setting select,.setting input { width:100%; min-height:38px; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--text); font:inherit; font-size:12px; }
+      fieldset { display:grid; grid-template-columns:1fr 1fr; gap:11px; margin:0; padding:13px; border:1px solid var(--line); border-radius:10px; }
+      fieldset label { display:flex; align-items:center; gap:8px; color:var(--text); font-size:11px; }
+      input[type="checkbox"] { accent-color:var(--ice); }
+      .url-list { display:grid; gap:10px; }
+      .url-list .setting { grid-template-columns:105px 1fr; align-items:center; }
+      .dialog-actions { display:flex; justify-content:space-between; gap:10px; padding:14px 22px 18px; border-top:1px solid var(--line); }
+      .dialog-button.primary { border-color:var(--ice); background:color-mix(in srgb,var(--ice) 15%,var(--surface)); color:var(--ice); }
+      @media (max-width:720px) { .grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+      @media (max-width:480px) { .shell { width:min(100% - 28px,390px); } .topbar { padding:17px 0; } main { padding:22px 0 35px; } .intro { margin-bottom:24px; } .monitor { margin:18px 0 28px; } .grid { grid-template-columns:1fr; gap:10px; } .card { min-height:125px; } footer { flex-direction:column; } fieldset { grid-template-columns:1fr; } .url-list .setting { grid-template-columns:1fr; } }
+      @media (prefers-reduced-motion:reduce) { *,*::before,*::after { transition-duration:.01ms !important; animation-duration:.01ms !important; } }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <nav class="topbar" aria-label="Portal controls">
+        <div class="brand"><span class="mark" aria-hidden="true">❄</span><span>Open Lakehouse</span></div>
+        <button class="settings-button" id="open-settings" type="button">⚙ Settings</button>
+      </nav>
+      <main>
+        <header class="intro">
+          <span class="eyebrow">Your local data platform</span>
+          <h1>Open Lakehouse</h1>
+          <p class="subtitle">One place to open and monitor your lakehouse tools.<br />Choose a service to get started.</p>
+        </header>
+        <div class="monitor" aria-live="polite">
+          <span class="monitor-summary"><span class="summary-dot checking" id="summary-dot"></span><span id="summary-text">Checking services…</span></span>
+          <span id="checked-at"></span>
+          <button class="refresh-button" id="refresh" type="button">↻ Refresh</button>
+        </div>
+
+        <p class="section-label">Core services</p>
+        <section class="grid" aria-label="Core services">
+          <a class="card" data-card="lakehouse" data-link="lakehouse" href="http://localhost:3030" target="_blank" rel="noopener noreferrer">
+            <div class="card-head"><span class="icon">⌂</span><span class="meta"><span class="state-dot checking" id="state-lakehouse"></span><span id="label-lakehouse">Checking</span><span class="arrow">↗</span></span></div>
+            <h2>Open Lakehouse Demo</h2><p>Interactive Iceberg demo and SQL Console</p>
+          </a>
+          <a class="card" data-card="lakekeeper" data-link="lakekeeper" href="http://localhost:8181/ui/" target="_blank" rel="noopener noreferrer">
+            <div class="card-head"><span class="icon">◇</span><span class="meta"><span class="state-dot checking" id="state-lakekeeper"></span><span id="label-lakekeeper">Checking</span><span class="arrow">↗</span></span></div>
+            <h2>Lakekeeper</h2><p>Iceberg catalog and warehouse management</p>
+          </a>
+          <a class="card" data-card="minio" data-link="minio" href="http://localhost:9001" target="_blank" rel="noopener noreferrer">
+            <div class="card-head"><span class="icon">▦</span><span class="meta"><span class="state-dot checking" id="state-minio"></span><span id="label-minio">Checking</span><span class="arrow">↗</span></span></div>
+            <h2>MinIO Console</h2><p>Browse object storage and lakehouse files</p>
+          </a>
+          <button class="card" data-card="spark" type="button" id="copy-jdbc" aria-label="Copy Spark Thrift JDBC URL">
+            <div class="card-head"><span class="icon">SQL</span><span class="meta"><span class="state-dot checking" id="state-spark"></span><span id="label-spark">Checking</span><span class="tag">Copy JDBC</span></span></div>
+            <h2>Spark Thrift</h2><p>HiveServer2 · <span id="jdbc-label">jdbc:hive2://localhost:10000</span></p><div id="copy-status" aria-live="polite"></div>
+          </button>
+        </section>
+
+        <p class="section-label optional-heading">Optional tools</p>
+        <section class="grid" aria-label="Optional tools">
+          <a class="card" data-card="flink" data-link="flink" href="http://localhost:8081" target="_blank" rel="noopener noreferrer">
+            <div class="card-head"><span class="icon">ƒ</span><span class="meta optional"><span class="state-dot checking" id="state-flink"></span><span id="label-flink">Checking</span><span>Optional</span></span></div>
+            <h2>Apache Flink</h2><p>Streaming jobs and cluster dashboard</p>
+          </a>
+          <a class="card" data-card="jupyter" data-link="jupyter" href="http://localhost:8888/lab" target="_blank" rel="noopener noreferrer">
+            <div class="card-head"><span class="icon">J</span><span class="meta optional"><span class="state-dot checking" id="state-jupyter"></span><span id="label-jupyter">Checking</span><span>Optional</span></span></div>
+            <h2>JupyterLab</h2><p>Notebooks for Spark, data engineering, and ML</p>
+          </a>
+          <a class="card" data-card="mlflow" data-link="mlflow" href="http://localhost:5000" target="_blank" rel="noopener noreferrer">
+            <div class="card-head"><span class="icon">M</span><span class="meta optional"><span class="state-dot checking" id="state-mlflow"></span><span id="label-mlflow">Checking</span><span>Optional</span></span></div>
+            <h2>MLflow</h2><p>Experiment tracking and model registry</p>
+          </a>
+          <a class="card" data-card="superset" data-link="superset" href="http://localhost:8088" target="_blank" rel="noopener noreferrer">
+            <div class="card-head"><span class="icon">S</span><span class="meta optional"><span class="state-dot checking" id="state-superset"></span><span id="label-superset">Checking</span><span>Optional</span></span></div>
+            <h2>Apache Superset</h2><p>Browse lakehouse tables and build charts</p>
+          </a>
+        </section>
+      </main>
+      <footer><span>Health status checks the local Docker services.</span><span>Open Lakehouse Demo: <a data-link="lakehouse" href="http://localhost:3030">localhost:3030</a></span></footer>
+    </div>
+
+    <dialog id="settings-dialog" aria-labelledby="settings-title">
+      <form id="settings-form">
+        <div class="dialog-head"><h2 id="settings-title">Portal settings</h2><button class="close-button" id="close-settings" type="button" aria-label="Close settings">×</button></div>
+        <div class="settings-form">
+          <div class="setting"><label for="theme-setting">Appearance</label><select id="theme-setting"><option value="dark">Dark</option><option value="light">Light</option></select></div>
+          <div class="setting"><label for="interval-setting">Health refresh interval</label><select id="interval-setting"><option value="5">Every 5 seconds</option><option value="15">Every 15 seconds</option><option value="30">Every 30 seconds</option><option value="0">Manual only</option></select></div>
+          <fieldset><legend>Show optional service cards</legend><label><input type="checkbox" id="show-jupyter" /> JupyterLab</label><label><input type="checkbox" id="show-mlflow" /> MLflow</label><label><input type="checkbox" id="show-flink" /> Flink</label><label><input type="checkbox" id="show-superset" /> Superset</label></fieldset>
+          <div><p class="section-label">Service links</p><div class="url-list">
+            <div class="setting"><label for="url-lakehouse">Open Lakehouse Demo</label><input id="url-lakehouse" type="url" /></div>
+            <div class="setting"><label for="url-flink">Flink</label><input id="url-flink" type="url" /></div>
+            <div class="setting"><label for="url-lakekeeper">Lakekeeper</label><input id="url-lakekeeper" type="url" /></div>
+            <div class="setting"><label for="url-minio">MinIO</label><input id="url-minio" type="url" /></div>
+            <div class="setting"><label for="url-jupyter">JupyterLab</label><input id="url-jupyter" type="url" /></div>
+            <div class="setting"><label for="url-mlflow">MLflow</label><input id="url-mlflow" type="url" /></div>
+            <div class="setting"><label for="url-superset">Superset</label><input id="url-superset" type="url" /></div>
+            <div class="setting"><label for="url-jdbc">Spark JDBC</label><input id="url-jdbc" type="text" /></div>
+          </div></div>
+        </div>
+        <div class="dialog-actions"><button class="dialog-button" id="reset-settings" type="button">Reset defaults</button><div><button class="dialog-button" id="cancel-settings" type="button">Cancel</button> <button class="dialog-button primary" type="submit">Save settings</button></div></div>
+      </form>
+    </dialog>
+
+    <script>
+      const defaults = {
+        theme: "dark", interval: 5, showFlink: true, showJupyter: true, showMlflow: true, showSuperset: true,
+        links: {
+          lakehouse: "http://localhost:3030", flink: "http://localhost:8081",
+          lakekeeper: "http://localhost:8181/ui/", minio: "http://localhost:9001",
+          jupyter: "http://localhost:8888/lab", mlflow: "http://localhost:5000",
+          superset: "http://localhost:8088",
+          jdbc: "jdbc:hive2://localhost:10000"
+        }
+      };
+      const storageKey = "open-lakehouse-portal-settings-v1";
+      const services = ["lakehouse", "spark", "flink", "lakekeeper", "minio", "jupyter", "mlflow", "superset"];
+      let settings = readSettings();
+      let timer = null;
+      function readSettings() {
+        try {
+          const saved = JSON.parse(localStorage.getItem(storageKey) || "{}");
+          return { ...defaults, ...saved, links: { ...defaults.links, ...(saved.links || {}) } };
+        } catch { return structuredClone(defaults); }
+      }
+      function applySettings() {
+        document.documentElement.dataset.theme = settings.theme;
+        document.querySelectorAll("[data-link]").forEach((el) => { el.href = settings.links[el.dataset.link] || defaults.links[el.dataset.link]; });
+        document.getElementById("jdbc-label").textContent = settings.links.jdbc;
+        document.querySelector('[data-card="flink"]').hidden = !settings.showFlink;
+        document.querySelector('[data-card="jupyter"]').hidden = !settings.showJupyter;
+        document.querySelector('[data-card="mlflow"]').hidden = !settings.showMlflow;
+        document.querySelector('[data-card="superset"]').hidden = !settings.showSuperset;
+        document.getElementById("theme-setting").value = settings.theme;
+        document.getElementById("interval-setting").value = String(settings.interval);
+        document.getElementById("show-flink").checked = settings.showFlink;
+        document.getElementById("show-jupyter").checked = settings.showJupyter;
+        document.getElementById("show-mlflow").checked = settings.showMlflow;
+        document.getElementById("show-superset").checked = settings.showSuperset;
+        for (const id of Object.keys(defaults.links)) document.getElementById(`url-${id}`).value = settings.links[id];
+        if (timer) clearInterval(timer);
+        timer = settings.interval ? setInterval(refreshHealth, settings.interval * 1000) : null;
+      }
+      function markService(id, value) {
+        const state = document.getElementById(`state-${id}`);
+        const label = document.getElementById(`label-${id}`);
+        if (!state || !label) return;
+        state.className = `state-dot ${value === true ? "online" : value === false ? "offline" : "checking"}`;
+        label.textContent = value === true ? "Online" : value === false ? "Offline" : "Unknown";
+      }
+      async function refreshHealth() {
+        document.getElementById("refresh").disabled = true;
+        try {
+          const response = await fetch("/api/health", { cache: "no-store" });
+          if (!response.ok) throw new Error("Health endpoint unavailable");
+          const health = await response.json();
+          for (const id of services) markService(id, typeof health[id] === "boolean" ? health[id] : null);
+          const core = ["lakehouse", "spark", "lakekeeper", "minio"];
+          const optional = ["flink", "jupyter", "mlflow", "superset"];
+          const coreUp = core.filter((id) => health[id] === true).length;
+          const optionalUp = optional.filter((id) => health[id] === true).length;
+          const dot = document.getElementById("summary-dot");
+          dot.className = `summary-dot ${coreUp === core.length ? "online" : coreUp ? "checking" : "offline"}`;
+          document.getElementById("summary-text").textContent = `${coreUp}/${core.length} core online · ${optionalUp}/${optional.length} optional online`;
+          document.getElementById("checked-at").textContent = `Checked ${new Date().toLocaleTimeString()}`;
+        } catch {
+          for (const id of services) markService(id, null);
+          document.getElementById("summary-dot").className = "summary-dot offline";
+          document.getElementById("summary-text").textContent = "Monitoring endpoint unavailable";
+          document.getElementById("checked-at").textContent = "Start the lakehouse and portal health service";
+        } finally { document.getElementById("refresh").disabled = false; }
+      }
+      const dialog = document.getElementById("settings-dialog");
+      document.getElementById("open-settings").addEventListener("click", () => dialog.showModal());
+      document.getElementById("close-settings").addEventListener("click", () => dialog.close());
+      document.getElementById("cancel-settings").addEventListener("click", () => dialog.close());
+      document.getElementById("refresh").addEventListener("click", refreshHealth);
+      document.getElementById("reset-settings").addEventListener("click", () => {
+        settings = structuredClone(defaults); applySettings(); localStorage.setItem(storageKey, JSON.stringify(settings));
+      });
+      document.getElementById("settings-form").addEventListener("submit", (event) => {
+        event.preventDefault();
+        const links = {};
+        for (const id of Object.keys(defaults.links)) {
+          const value = document.getElementById(`url-${id}`).value.trim();
+          if (id === "jdbc") {
+            if (!value.startsWith("jdbc:hive2://")) { document.getElementById(`url-${id}`).focus(); return; }
+            links[id] = value;
+          } else {
+            try { const parsed = new URL(value); if (!["http:", "https:"].includes(parsed.protocol)) throw new Error(); links[id] = parsed.href; }
+            catch { document.getElementById(`url-${id}`).focus(); return; }
+          }
+        }
+        settings = {
+          theme: document.getElementById("theme-setting").value,
+          interval: Number(document.getElementById("interval-setting").value),
+          showFlink: document.getElementById("show-flink").checked,
+          showJupyter: document.getElementById("show-jupyter").checked,
+          showMlflow: document.getElementById("show-mlflow").checked,
+          showSuperset: document.getElementById("show-superset").checked,
+          links
+        };
+        localStorage.setItem(storageKey, JSON.stringify(settings)); applySettings(); dialog.close(); refreshHealth();
+      });
+      document.getElementById("copy-jdbc").addEventListener("click", async () => {
+        const status = document.getElementById("copy-status");
+        try { await navigator.clipboard.writeText(settings.links.jdbc); status.textContent = "JDBC URL copied"; }
+        catch { status.textContent = settings.links.jdbc; }
+      });
+      applySettings(); refreshHealth();
+    </script>
+  </body>
+</html>
